@@ -1,118 +1,80 @@
 // ═══════════════════════════════════════════════════════════════════
-// Components – DOM builders for the UI
+// Components — DOM builders
 // ═══════════════════════════════════════════════════════════════════
 
-const Components = {
-  // ── Stop Card ──────────────────────────────────────────────────
-  stopCard(stop, isFav = false) {
-    const card = document.createElement("div");
-    card.className = "stop-card";
-    card.dataset.stopId = stop.id;
+const C = {
 
-    const icon = stop.direction === "Inbound" ? "🏙️" : "🏠";
-    const favBtn = document.createElement("button");
-    favBtn.className = `fav-btn ${isFav ? "active" : ""}`;
-    favBtn.textContent = isFav ? "⭐" : "☆";
-    favBtn.setAttribute("aria-label", isFav ? "Remove from favourites" : "Add to favourites");
-    favBtn.onclick = (e) => {
-      e.stopPropagation();
-      App.toggleFavourite(stop.id);
-    };
-
-    const routesHtml = stop.routes
-      .map((r) => `<span class="route-badge" style="background:${Utils.getRouteColor(r)}">${r}</span>`)
-      .join("");
-
-    card.innerHTML = `
-      <span class="stop-icon">${icon}</span>
-      <div class="stop-info">
-        <div class="stop-name">${stop.name}</div>
-        <div class="stop-road">${stop.road}</div>
-        <div class="stop-routes">${routesHtml}</div>
-        <div class="stop-desc">${stop.direction === "Inbound" ? "→ City Centre" : "← " + stop.description}</div>
-      </div>
-    `;
-    card.appendChild(favBtn);
-
-    card.addEventListener("click", () => App.showDepartures(stop.id));
-    return card;
+  hero(data) {
+    const d = data[0];
+    if (!d) return;
+    document.getElementById("heroRoute").textContent = d.route;
+    document.getElementById("heroDest").textContent = d.dest;
+    document.getElementById("heroCountdown").textContent = Utils.fmt(d.min);
+    document.getElementById("heroSub").textContent = d.min <= 1 ? "Due now" : "tap for all times";
+    document.getElementById("heroStop").textContent = d.stop;
+    document.getElementById("heroBadge").textContent = d.min <= 1 ? "Due Now" : "Next Departure";
+    document.querySelector(".hero").dataset.route = d.route;
   },
 
-  // ── Departure Card ─────────────────────────────────────────────
-  departureCard(dep) {
-    const card = document.createElement("div");
-    card.className = `dep-card ${dep.isDue ? "due" : ""}`;
-
-    const routeColor = Utils.getRouteColor(dep.route);
-    const dueText = Utils.formatDue(dep.dueMinutes);
-
-    card.innerHTML = `
-      <div class="dep-route">
-        <span class="route-badge" style="background:${routeColor}">${dep.route}</span>
-      </div>
-      <div class="dep-info">
-        <div class="dep-dest">${dep.destination}</div>
-        <div class="dep-meta">
-          ${dep.isRealtime ? '<span class="dep-realtime">● Live</span>' : '<span class="dep-scheduled">Scheduled</span>'}
-          ${dep.stopName ? ` · ${dep.stopName}` : ""}
-        </div>
-      </div>
-      <div class="dep-time">
-        ${dep.dueMinutes <= 0 ? "NOW" : dueText}
-        <div class="dep-minutes">${dep.dueTime}</div>
-      </div>
-    `;
-
-    // Stagger animation
-    card.style.animationDelay = "0s";
-    return card;
-  },
-
-  // ── Route Card ─────────────────────────────────────────────────
-  routeCard(route) {
+  routeCard(route, next) {
     const card = document.createElement("div");
     card.className = "route-card";
+    card.dataset.route = route.number;
+    const color = route.color;
+    const fav = (App.favourites || []).includes(route.number);
     card.innerHTML = `
-      <span class="route-badge" style="background:${route.color};min-width:44px;height:32px;font-size:14px">${route.number}</span>
-      <div class="route-info">
-        <div class="route-name">${route.name}</div>
-        <div class="route-via">via ${route.via}</div>
-        <div class="route-operator">${route.operator}</div>
+      <div class="rc-badge" style="background:${color}">${route.number}</div>
+      <div class="rc-info">
+        <div class="rc-name">${route.name.replace(" – "," → ")}</div>
+        <div class="rc-via">${route.via}</div>
+        ${next ? `<div class="rc-next"><span class="rc-time">${next.min}</span><span class="rc-unit">min</span></div>` : '<div class="rc-next" style="color:var(--muted);font-size:12px">No upcoming departures</div>'}
       </div>
+      <button class="rc-star ${fav?'active':''}" data-route="${route.number}" aria-label="Toggle favourite">${fav?'★':'☆'}</button>
+      <span class="rc-arrow">›</span>
     `;
+    card.querySelector(".rc-star").addEventListener("click", (e) => {
+      e.stopPropagation();
+      App.toggleFavRoute(route.number);
+    });
+    card.addEventListener("click", () => App.showSchedule(route.number));
     return card;
   },
 
-  // ── Nearby Stop Group ──────────────────────────────────────────
-  nearbyGroup(item) {
-    const group = document.createElement("div");
-    group.className = "nearby-group";
+  scheduleStop(stopName, rows) {
+    const g = document.createElement("div");
+    g.className = "sch-group";
+    g.innerHTML = `<div class="sch-stop-name">🚏 ${stopName}</div>`;
+    rows.forEach(r => {
+      const row = document.createElement("div");
+      row.className = "sch-row";
+      row.innerHTML = `<span class="sch-row-time">${r.time}</span><span class="sch-row-dest">${r.dest}</span>`;
+      g.appendChild(row);
+    });
+    return g;
+  },
 
-    const routeBages = item.stop.routes
-      .map((r) => `<span class="route-badge" style="background:${Utils.getRouteColor(r)}">${r}</span>`)
-      .join("");
+  luasCard(stop) {
+    const card = document.createElement("div");
+    card.className = "luas-card";
+    card.innerHTML = `<div class="luas-code">${stop.code}</div><div><div style="font-weight:600;font-size:14px">${stop.name}</div><div style="font-size:10px;color:var(--muted)">${stop.line} Line</div></div>`;
+    card.addEventListener("click", () => App.showLuas(stop.code, stop.name));
+    return card;
+  },
 
-    const depsHtml = item.departures
-      .map((d) => {
-        const dueText = Utils.formatDue(d.dueMinutes);
-        return `<div class="dep-card ${d.isDue ? "due" : ""}" style="margin-bottom:6px;padding:10px 14px">
-          <div class="dep-route"><span class="route-badge" style="background:${Utils.getRouteColor(d.route)}">${d.route}</span></div>
-          <div class="dep-info"><div class="dep-dest">${d.destination}</div></div>
-          <div class="dep-time" style="font-size:18px">${d.dueMinutes <= 0 ? "NOW" : dueText}<div class="dep-minutes">${d.dueTime}</div></div>
-        </div>`;
-      })
-      .join("");
-
-    group.innerHTML = `
-      <div class="nearby-group-title">
-        ${routeBages} ${item.stop.name}
-        <span class="stop-dir">${item.stop.road}</span>
-      </div>
-      ${depsHtml}
-    `;
-
-    group.style.cursor = "pointer";
-    group.addEventListener("click", () => App.showDepartures(item.stop.id));
-    return group;
+  luasDir(dir) {
+    const g = document.createElement("div");
+    g.style.marginBottom = "10px";
+    const label = document.createElement("div");
+    label.style.cssText = "font-size:12px;font-weight:700;color:var(--sec);margin:8px 0 4px";
+    label.textContent = `⬡ ${dir.direction}`;
+    g.appendChild(label);
+    dir.trams.forEach(t => {
+      const row = document.createElement("div");
+      row.className = "sch-row";
+      const due = t.dueMinutes <= 0 ? "NOW" : t.dueMinutes + "m";
+      row.innerHTML = `<span class="sch-row-time" style="color:#00985F">${due}</span><span class="sch-row-dest">${t.destination}</span>`;
+      g.appendChild(row);
+    });
+    return g;
   },
 };

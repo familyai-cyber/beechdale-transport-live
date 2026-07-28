@@ -1,593 +1,217 @@
 // ═══════════════════════════════════════════════════════════════════
-// App – main application controller
+// App — main controller
+// Flow: Routes (default) → Schedule → Luas → Saved
 // ═══════════════════════════════════════════════════════════════════
 
 const App = {
-  stops: [],
+  view: "routes",
+  routes: [],
   luasStops: [],
-  favourites: [],
-  currentView: "stops",
-  currentStopId: null,
-  currentLuasStop: null,
-  routeFilter: "all",
-  updateTimer: null,
+  favourites: Utils.storage("favs") || [],
+  countdownTimer: null,
+  _allDeps: [],
 
-  // ── Init ────────────────────────────────────────────────────────
   async init() {
-    this.favourites = Utils.getStorage("favourites", []);
+    this.routes = Object.values(BusData.routes);
+    this.luasStops = LuasData.stops;
 
-    // Load bus stops from API
-    try {
-      this.stops = await ApiClient.getStops();
-    } catch (e) {
-      console.error("Failed to load stops:", e);
-    }
-
-    // Load Luas stops from API
-    try {
-      this.luasStops = await ApiClient.getLuasStops();
-    } catch (e) {
-      console.error("Failed to load luas stops:", e);
-    }
-
-    // Load theme preference
-    const theme = Utils.getStorage("theme", "light");
+    const theme = Utils.storage("theme") || "light";
     document.documentElement.setAttribute("data-theme", theme);
-    document.getElementById("themeToggle").textContent = theme === "dark" ? "☀️" : "🌙";
 
-    // Set greeting
-    this.updateGreeting();
-
-    // Set up event listeners
-    this.setupListeners();
-
-    // Initial render
-    this.renderStops();
-    this.updateNextBusTile();
-
-    // Start auto-refresh timer
-    this.startAutoRefresh();
-
-    // Set status bar time
-    this.updateStatusTime();
-    setInterval(() => this.updateStatusTime(), 10000);
-
-    // Load server status for info modal
-    this.loadStatus();
-  },
-
-  // ── Event Listeners ─────────────────────────────────────────────
-  setupListeners() {
-    // Theme toggle
-    document.getElementById("themeToggle").addEventListener("click", () => this.toggleTheme());
-
-    // Info modal
-    document.getElementById("infoBtn").addEventListener("click", () => {
-      Utils.show(document.getElementById("infoModal"));
-    });
-    document.getElementById("modalClose").addEventListener("click", () => {
-      Utils.hide(document.getElementById("infoModal"));
-    });
-    document.getElementById("infoModal").addEventListener("click", (e) => {
-      if (e.target === e.currentTarget) Utils.hide(document.getElementById("infoModal"));
-    });
-
-    // Settings modal
-    document.getElementById("settingsBtn").addEventListener("click", () => {
-      Utils.show(document.getElementById("settingsModal"));
-      this.loadApiKeyStatus();
-    });
-    document.getElementById("settingsModalClose").addEventListener("click", () => {
-      Utils.hide(document.getElementById("settingsModal"));
-    });
-    document.getElementById("settingsModal").addEventListener("click", (e) => {
-      if (e.target === e.currentTarget) Utils.hide(document.getElementById("settingsModal"));
-    });
+    document.getElementById("settingsBtn").addEventListener("click", () => Utils.show(document.getElementById("settingsModal")));
+    document.getElementById("infoBtn").addEventListener("click", () => Utils.show(document.getElementById("infoModal")));
+    document.getElementById("modalClose").addEventListener("click", () => Utils.hide(document.getElementById("infoModal")));
+    document.getElementById("infoModal").addEventListener("click", (e) => { if(e.target===e.currentTarget) Utils.hide(e.target) });
+    document.getElementById("settingsModalClose").addEventListener("click", () => Utils.hide(document.getElementById("settingsModal")));
+    document.getElementById("settingsModal").addEventListener("click", (e) => { if(e.target===e.currentTarget) Utils.hide(e.target) });
     document.getElementById("saveApiKeyBtn").addEventListener("click", () => this.saveApiKey());
-
-    // Stop search
-    const searchInput = document.getElementById("stopSearch");
-    searchInput.addEventListener("input", Utils.debounce(() => this.filterStops(searchInput.value), 150));
-
-    // Route pills
-    document.querySelectorAll(".pill").forEach((pill) => {
-      pill.addEventListener("click", () => {
-        document.querySelectorAll(".pill").forEach((p) => p.classList.remove("active"));
-        pill.classList.add("active");
-        this.routeFilter = pill.dataset.route;
-        this.renderStops();
-      });
+    document.getElementById("schBack").addEventListener("click", () => this.showRoutes());
+    document.getElementById("luasBack").addEventListener("click", () => this.showLuasList());
+    document.querySelector(".hero").addEventListener("click", () => {
+      const r = document.querySelector(".hero").dataset.route;
+      if (r) this.showSchedule(r);
     });
 
-    // Bottom nav
-    document.querySelectorAll(".nav-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-        this.switchView(btn.dataset.view);
-      });
-    });
+    document.querySelectorAll(".nav-btn").forEach(b => b.addEventListener("click", () => {
+      document.querySelectorAll(".nav-btn").forEach(x => x.classList.remove("active"));
+      b.classList.add("active");
+      this.switchView(b.dataset.view);
+    }));
 
-    // Back button
-    document.getElementById("backBtn").addEventListener("click", () => this.backToStops());
+    this.showRoutes();
+    const ut = () => document.getElementById("statusTime").textContent = new Date().toLocaleTimeString("en-IE",{hour:"2-digit",minute:"2-digit"});
+    ut(); setInterval(ut, 10000);
   },
 
-  // ── Theme ───────────────────────────────────────────────────────
-  toggleTheme() {
-    const current = document.documentElement.getAttribute("data-theme");
-    const next = current === "dark" ? "light" : "dark";
-    document.documentElement.setAttribute("data-theme", next);
-    Utils.setStorage("theme", next);
-    document.getElementById("themeToggle").textContent = next === "dark" ? "☀️" : "🌙";
+  // ─── Routes ═══════════════════════════════════════════════════
+  async showRoutes() {
+    this.view = "routes";
+    ["scheduleView","luasView","savedView"].forEach(id => Utils.hide(document.getElementById(id)));
+    Utils.show(document.querySelector(".hero"));
+    Utils.show(document.getElementById("routesList"));
+    if (this.countdownTimer) { clearInterval(this.countdownTimer); this.countdownTimer = null; }
+    await this.refreshRoutes();
+    this.startCountdown();
   },
 
-  // ── Greeting ────────────────────────────────────────────────────
-  updateGreeting() {
-    const h = new Date().getHours();
-    let greeting = "Good evening";
-    let icon = "🌙";
-    if (h < 5) { greeting = "Late night?"; icon = "🌙"; }
-    else if (h < 12) { greeting = "Good morning"; icon = "☀️"; }
-    else if (h < 14) { greeting = "Good afternoon"; icon = "🌤️"; }
-    else if (h < 18) { greeting = "Good afternoon"; icon = "🌤️"; }
-    else { greeting = "Good evening"; icon = "🌆"; }
-    document.getElementById("greetingText").textContent = greeting;
-    document.querySelector(".greeting-icon").textContent = icon;
+  async refreshRoutes() {
+    const all = MockData.allNearby();
+    const byRoute = {};
+    for (const item of all) {
+      for (const d of item.departures) {
+        if (!byRoute[d.route]) byRoute[d.route] = [];
+        byRoute[d.route].push({ ...d, stopName: item.stop.name });
+      }
+    }
+    for (const r in byRoute) byRoute[r].sort((a,b) => a.dueMinutes - b.dueMinutes);
+
+    const allDeps = [];
+    for (const r in byRoute) for (const d of byRoute[r]) allDeps.push(d);
+    allDeps.sort((a,b) => a.dueMinutes - b.dueMinutes);
+    this._allDeps = allDeps;
+
+    C.hero(allDeps.map(d => ({ route: d.route, dest: d.destination, min: d.dueMinutes, stop: d.stopName })));
+
+    const list = document.getElementById("routesList");
+    list.innerHTML = "";
+    for (const route of this.routes) {
+      const deps = byRoute[route.number];
+      const next = deps ? { min: deps[0].dueMinutes, dest: deps[0].destination } : null;
+      list.appendChild(C.routeCard(route, next));
+    }
+    document.getElementById("statusData").textContent = allDeps.length > 0 && allDeps[0].isRealtime ? "Luas Live · Bus Live" : "Luas Live · Bus Demo";
   },
 
-  // ── Next Bus Tile ──────────────────────────────────────────────
-  async updateNextBusTile() {
-    const body = document.getElementById("nextBusBody");
-    try {
-      const data = await ApiClient.getNearby();
-      const allDeps = [];
-      for (const item of data.stops) {
-        for (const dep of item.departures) {
-          allDeps.push({ ...dep, stopName: item.stop.name, stopId: item.stop.id });
+  startCountdown() {
+    if (this.countdownTimer) clearInterval(this.countdownTimer);
+    this.countdownTimer = setInterval(() => {
+      const heroEl = document.getElementById("heroCountdown");
+      const curr = this._allDeps[0];
+      if (heroEl && curr) {
+        curr.dueMinutes = Math.max(0, curr.dueMinutes - 1/15);
+        const d = Math.round(curr.dueMinutes);
+        heroEl.textContent = Utils.fmt(d);
+        document.getElementById("heroBadge").textContent = d <= 1 ? "Due Now" : "Next Departure";
+      }
+      document.querySelectorAll(".route-card").forEach(card => {
+        const r = card.dataset.route;
+        const te = card.querySelector(".rc-time");
+        if (!te) return;
+        const dd = this._allDeps.filter(d => d.route === r);
+        if (dd.length > 0) {
+          dd[0].dueMinutes = Math.max(0, dd[0].dueMinutes - 1/15);
+          te.textContent = Utils.fmt(Math.round(dd[0].dueMinutes));
         }
-      }
-      allDeps.sort((a, b) => a.dueMinutes - b.dueMinutes);
-      const next = allDeps.slice(0, 3);
-      if (next.length === 0) {
-        body.innerHTML = '<div class="nextbus-loading">No upcoming departures</div>';
-        return;
-      }
-      body.innerHTML = next.map((d, i) => `
-        <div class="nextbus-row" style="cursor:pointer" data-stop="${d.stopId}">
-          <span class="nb-route"><span class="route-badge" style="background:${Utils.getRouteColor(d.route)}">${d.route}</span></span>
-          <span class="nb-dest">${d.destination || "City Centre"}</span>
-          <span class="nb-time">${d.dueMinutes <= 1 ? "NOW" : d.dueMinutes + "m"}</span>
-        </div>
-        ${i < next.length - 1 ? '<div style="border-top:1px solid rgba(255,255,255,0.15);"></div>' : ""}
-      `).join("");
-      body.querySelectorAll(".nextbus-row").forEach((el) => {
-        el.addEventListener("click", () => this.showDepartures(el.dataset.stop));
       });
-      document.getElementById("nextBusSource").textContent =
-        data.stops[0]?.departures[0]?.isRealtime ? "Live 🟢" : "Demo 🎯";
-    } catch (e) {
-      body.innerHTML = '<div class="nextbus-loading">Next bus unavailable</div>';
-    }
+    }, 2000);
   },
 
-  // ── Views ───────────────────────────────────────────────────────
-  switchView(view) {
-    this.currentView = view;
-    const container = document.getElementById("stopSelector");
-    const depSection = document.getElementById("departureSection");
-    container.style.display = "";
-    depSection.style.display = "none";
-    // Hide map
-    document.getElementById("stopMap").style.display = "none";
-    if (this._currentMap) { try { this._currentMap.remove(); } catch(e) {} this._currentMap = null; }
+  // ─── Schedule ═════════════════════════════════════════════════
+  async showSchedule(routeNum) {
+    this.view = "schedule";
+    Utils.hide(document.querySelector(".hero"));
+    Utils.hide(document.getElementById("routesList"));
+    Utils.show(document.getElementById("scheduleView"));
 
-    // Close any open modals
-    document.getElementById("infoModal").style.display = "none";
-    document.getElementById("settingsModal").style.display = "none";
+    const route = BusData.getRoute(routeNum);
+    document.getElementById("schTitle").textContent = `Route ${routeNum}`;
+    document.getElementById("schSub").textContent = route.name;
 
-    switch (view) {
-      case "stops":
-        this.renderStops();
-        this.updateNextBusTile();
-        break;
-      case "luas":
-        this.renderLuas();
-        break;
-      case "nearby":
-        this.renderNearby();
-        break;
-      case "routes":
-        this.renderRoutes();
-        break;
+    const body = document.getElementById("schBody");
+    body.innerHTML = '<div class="loading">Loading…</div>';
+
+    const all = MockData.allNearby();
+    const sfr = all.filter(item => item.stop.routes.includes(routeNum));
+    body.innerHTML = "";
+    let h = false;
+    for (const item of sfr) {
+      const deps = item.departures.filter(d => d.route === routeNum);
+      if (deps.length === 0) continue;
+      h = true;
+      body.appendChild(C.scheduleStop(item.stop.name, deps.map(d => ({ time: Utils.due(d.dueMinutes), dest: d.destination }))));
     }
+    if (!h) body.innerHTML = '<div class="loading">No departures</div>';
   },
 
-  // ── Render Stops ────────────────────────────────────────────────
-  renderStops(filterText = "") {
-    const container = document.getElementById("stopSelector");
-    const depSection = document.getElementById("departureSection");
-    container.style.display = "";
-    depSection.style.display = "none";
-
-    // Rebuild search + grid
-    container.innerHTML = `
-      <div class="search-box">
-        <span class="search-icon">🔍</span>
-        <input type="text" id="stopSearch" placeholder="Search stops, routes..." autocomplete="off" />
-      </div>
-      <div class="stops-grid" id="stopsGrid"></div>
-    `;
-
-    document.getElementById("stopSearch").addEventListener("input",
-      Utils.debounce(() => this.filterStops(document.getElementById("stopSearch").value), 150)
-    );
-
-    this.filterStops(filterText || document.getElementById("stopSearch")?.value || "");
-    this.renderFavourites();
-  },
-
-  filterStops(query) {
-    const grid = document.getElementById("stopsGrid");
-    if (!grid) return;
-
-    let filtered = this.stops;
-
-    // Apply route filter
-    if (this.routeFilter !== "all") {
-      filtered = filtered.filter((s) => s.routes.includes(this.routeFilter));
-    }
-
-    // Apply text search
-    const q = query.toLowerCase().trim();
-    if (q) {
-      filtered = filtered.filter(
-        (s) =>
-          s.name.toLowerCase().includes(q) ||
-          s.road.toLowerCase().includes(q) ||
-          s.routes.some((r) => r.includes(q))
-      );
-    }
-
-    grid.innerHTML = "";
-    for (const stop of filtered) {
-      grid.appendChild(Components.stopCard(stop, this.favourites.includes(stop.id)));
-    }
-
-    if (filtered.length === 0) {
-      grid.innerHTML = `<div class="loading">No stops found</div>`;
-    }
-  },
-
-  // ── Render Favourites ───────────────────────────────────────────
-  renderFavourites() {
-    const bar = document.getElementById("favesBar");
-    const list = document.getElementById("favesList");
-    if (this.favourites.length === 0) {
-      bar.style.display = "none";
-      return;
-    }
-    bar.style.display = "";
-    list.innerHTML = this.favourites
-      .map((id) => {
-        const stop = this.stops.find((s) => s.id === id);
-        if (!stop) return "";
-        return `<span class="fave-chip" data-stop-id="${stop.id}">${stop.name}</span>`;
-      })
-      .join("");
-
-    list.querySelectorAll(".fave-chip").forEach((chip) => {
-      chip.addEventListener("click", () => this.showDepartures(chip.dataset.stopId));
-    });
-  },
-
-  // ── Toggle Favourite ────────────────────────────────────────────
-  toggleFavourite(stopId) {
-    const idx = this.favourites.indexOf(stopId);
-    if (idx === -1) {
-      this.favourites.push(stopId);
-      Utils.toast("⭐ Added to favourites");
-    } else {
-      this.favourites.splice(idx, 1);
-      Utils.toast("Removed from favourites");
-    }
-    Utils.setStorage("favourites", this.favourites);
-    this.renderStops(document.getElementById("stopSearch")?.value || "");
-  },
-
-  // ── Show Departures ────────────────────────────────────────────
-  async showDepartures(stopId) {
-    this.currentStopId = stopId;
-    const container = document.getElementById("stopSelector");
-    const depSection = document.getElementById("departureSection");
-
-    container.style.display = "none";
-    depSection.style.display = "";
-
-    const stop = this.stops.find((s) => s.id === stopId);
-    if (stop) {
-      document.getElementById("depStopName").textContent = stop.name;
-      document.getElementById("depStopDesc").textContent = `${stop.road} · ${stop.direction}`;
-
-      // Render map
-      this.renderStopMap(stop);
-    }
-
-    await this.loadDepartures(stopId);
-  },
-
-  renderStopMap(stop) {
-    const mapContainer = document.getElementById("stopMap");
-    if (!stop.lat || !stop.lng) { mapContainer.style.display = "none"; mapContainer.innerHTML = ""; return; }
-
-    // Destroy previous Leaflet map instance if any
-    if (this._currentMap) {
-      try { this._currentMap.remove(); } catch(e) {}
-      this._currentMap = null;
-    }
-
-    // Use OpenStreetMap embed iframe - works reliably, no external JS dependencies
-    const margin = 0.008;
-    const bbox = `${stop.lng - margin},${stop.lat - margin},${stop.lng + margin},${stop.lat + margin}`;
-    const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${stop.lat},${stop.lng}`;
-
-    mapContainer.style.display = "";
-    mapContainer.innerHTML = `
-      <div style="position:relative;height:180px;border-radius:var(--radius-sm);overflow:hidden;background:var(--bg-pill);">
-        <iframe src="${embedUrl}" style="width:100%;height:100%;border:none;" loading="lazy" title="Map of ${stop.name}"></iframe>
-        <a href="https://www.openstreetmap.org/?mlat=${stop.lat}&mlon=${stop.lng}&zoom=15" target="_blank" style="position:absolute;bottom:2px;right:4px;font-size:9px;color:rgba(0,0,0,0.5);background:rgba(255,255,255,0.8);padding:1px 6px;border-radius:3px;text-decoration:none;">OpenStreetMap</a>
-      </div>
-    `;
-  },
-
-  async loadDepartures(stopId) {
-    const board = document.getElementById("departureBoard");
-    board.innerHTML = '<div class="loading">⏳ Loading departures…</div>';
-
-    try {
-      const data = await ApiClient.getDepartures(stopId);
-
-      if (data.departures.length === 0) {
-        board.innerHTML = '<div class="empty-state"><div class="empty-icon">🚌</div><div class="empty-title">No departures</div><div class="empty-desc">Check back soon</div></div>';
-        return;
-      }
-
-      board.innerHTML = "";
-      data.departures.forEach((dep, i) => {
-        const card = Components.departureCard(dep);
-        card.style.animationDelay = `${i * 0.06}s`;
-        board.appendChild(card);
-      });
-
-      // Update status
-      const sourceTag = data.source === "tfi" ? "Live 🟢" : data.source === "mock" ? "Demo 🎯" : "Demo (fallback)";
-      document.getElementById("statusText").textContent = sourceTag;
-
-    } catch (e) {
-      board.innerHTML = `<div class="loading">⚠️ Could not load departures<br><small>${e.message}</small></div>`;
-    }
-  },
-
-  // ── Luas View ──────────────────────────────────────────────────
-  async renderLuas() {
-    const container = document.getElementById("stopSelector");
-    container.style.display = "";
-    document.getElementById("departureSection").style.display = "none";
-
-    container.innerHTML = `
-      <div style="margin-bottom:12px;padding:12px 16px;background:var(--bg-card);border-radius:var(--radius-sm);border:1px solid var(--border);display:flex;align-items:center;gap:8px;">
-        <span style="font-size:14px;">🚊</span>
-        <span style="font-size:13px;color:var(--text-secondary);"><strong>Live Luas times</strong> — Green Line</span>
-        <span style="margin-left:auto;padding:2px 10px;background:rgba(16,185,129,0.15);color:var(--green);border-radius:var(--radius-pill);font-size:11px;font-weight:700;">LIVE</span>
-      </div>
-      <div class="stops-grid" id="luasGrid"></div>
-    `;
+  // ─── Luas ═════════════════════════════════════════════════════
+  async showLuasList() {
+    this.view = "luas";
+    ["scheduleView","savedView"].forEach(id => Utils.hide(document.getElementById(id)));
+    Utils.hide(document.querySelector(".hero"));
+    Utils.hide(document.getElementById("routesList"));
+    Utils.show(document.getElementById("luasView"));
+    document.getElementById("luasDetail").style.display = "none";
+    document.getElementById("luasGrid").style.display = "";
 
     const grid = document.getElementById("luasGrid");
-    if (!this.luasStops.length) {
-      grid.innerHTML = '<div class="loading">No Luas stops available</div>';
-      return;
-    }
-
-    // Show Green Line stops first (most relevant), then Red Line
-    const green = this.luasStops.filter((s) => s.line === "Green");
-    const red = this.luasStops.filter((s) => s.line === "Red");
-
-    for (const stop of [...green, ...red]) {
-      const card = document.createElement("div");
-      card.className = "stop-card";
-      card.innerHTML = `
-        <span class="stop-icon">🚊</span>
-        <div class="stop-info">
-          <div class="stop-name">${stop.name}</div>
-          <div class="stop-road" style="color:${stop.line === "Green" ? "#00985F" : "#DA291C"};font-weight:600;">${stop.line} Line</div>
-        </div>
-        <span style="font-size:12px;color:var(--text-muted);">${stop.code}</span>
-      `;
-      card.addEventListener("click", () => this.showLuasForecast(stop.code, stop.name));
-      grid.appendChild(card);
+    if (grid.children.length === 0) {
+      const green = this.luasStops.filter(s => s.line === "Green");
+      const red = this.luasStops.filter(s => s.line === "Red");
+      [...green, ...red].forEach(s => grid.appendChild(C.luasCard(s)));
     }
   },
 
-  async showLuasForecast(stopCode, stopName) {
-    const container = document.getElementById("stopSelector");
-    const depSection = document.getElementById("departureSection");
-    container.style.display = "none";
-    depSection.style.display = "";
-    this.currentLuasStop = stopCode;
-
-    document.getElementById("depStopName").textContent = `🚊 ${stopName}`;
-    document.getElementById("depStopDesc").textContent = `Luas Green Line · Live times`;
-
-    const board = document.getElementById("departureBoard");
-    board.innerHTML = '<div class="loading">⏳ Loading Luas times…</div>';
-
+  async showLuas(code, name) {
+    document.getElementById("luasGrid").style.display = "none";
+    document.getElementById("luasDetail").style.display = "";
+    const fc = document.getElementById("luasForecast");
+    fc.innerHTML = '<div class="loading">Loading…</div>';
     try {
-      const data = await ApiClient.getLuasForecast(stopCode);
-
-      if (!data.directions || data.directions.length === 0) {
-        board.innerHTML = '<div class="loading">No Luas services available</div>';
-        return;
-      }
-
-      board.innerHTML = "";
-      if (data.message) {
-        const msg = document.createElement("div");
-        msg.style.cssText = "padding:8px 14px;margin-bottom:12px;background:var(--accent-light);border-radius:var(--radius-sm);font-size:13px;color:var(--text-secondary);text-align:center;";
-        msg.textContent = data.message;
-        board.appendChild(msg);
-      }
-
-      for (const dir of data.directions) {
-        const dirLabel = document.createElement("div");
-        dirLabel.style.cssText = "font-size:13px;font-weight:700;color:var(--text-secondary);margin:8px 0 4px;padding:0 4px;";
-        dirLabel.textContent = `⬡ ${dir.direction}`;
-        board.appendChild(dirLabel);
-
-        for (const tram of dir.trams) {
-          const card = document.createElement("div");
-          const due = tram.dueMinutes <= 1;
-          card.className = `dep-card ${due ? "due" : ""}`;
-          card.innerHTML = `
-            <div class="dep-route"><span class="route-badge" style="background:#00985F;min-width:36px;">🚊</span></div>
-            <div class="dep-info">
-              <div class="dep-dest">${tram.destination}</div>
-              <div class="dep-meta"><span class="dep-realtime">● Live Luas</span></div>
-            </div>
-            <div class="dep-time">
-              ${tram.dueMinutes <= 0 ? "NOW" : tram.dueMinutes + " min"}
-              <div class="dep-minutes">${dir.direction}</div>
-            </div>
-          `;
-          board.appendChild(card);
-        }
-      }
-
-      document.getElementById("statusText").textContent = "Luas LIVE 🟢";
-
-    } catch (e) {
-      board.innerHTML = `<div class="loading">⚠️ Could not load Luas data<br><small>${e.message}</small></div>`;
+      const data = await LuasData.forecast(code);
+      fc.innerHTML = `<div style="font-size:16px;font-weight:700;margin-bottom:8px">🚊 ${name}</div>`;
+      if (data.message) fc.innerHTML += `<div style="font-size:12px;color:var(--sec);margin-bottom:8px">${data.message}</div>`;
+      data.directions.forEach(d => fc.appendChild(C.luasDir(d)));
+    } catch(e) {
+      fc.innerHTML = '<div class="loading">Failed to load</div>';
     }
   },
 
-  // ── Back to Stops ──────────────────────────────────────────────
-  backToStops() {
-    document.getElementById("stopSelector").style.display = "";
-    document.getElementById("departureSection").style.display = "none";
-    // Hide map
-    document.getElementById("stopMap").style.display = "none";
-    document.getElementById("stopMap").innerHTML = "";
-    if (this._currentMap) {
-      try { this._currentMap.remove(); } catch(e) {}
-      this._currentMap = null;
+  // ─── Saved ════════════════════════════════════════════════════
+  toggleFavRoute(r) {
+    const i = this.favourites.indexOf(r);
+    if (i === -1) { this.favourites.push(r); Utils.toast("⭐ Saved"); }
+    else { this.favourites.splice(i, 1); Utils.toast("Removed"); }
+    Utils.storage("favs", this.favourites);
+    this.refreshRoutes();
+  },
+
+  async showSaved() {
+    this.view = "saved";
+    ["scheduleView","luasView"].forEach(id => Utils.hide(document.getElementById(id)));
+    Utils.hide(document.querySelector(".hero"));
+    Utils.hide(document.getElementById("routesList"));
+    Utils.show(document.getElementById("savedView"));
+
+    const c = document.getElementById("savedContent");
+    if (this.favourites.length === 0) { c.innerHTML = '<div class="empty-state">Tap ★ on any route to save it</div>'; return; }
+    const all = MockData.allNearby();
+    let html = "";
+    for (const r of this.favourites) {
+      const rt = BusData.getRoute(r);
+      if (!rt) continue;
+      const deps = [];
+      for (const item of all) if (item.stop.routes.includes(r)) item.departures.filter(d => d.route===r).forEach(d => deps.push(d));
+      deps.sort((a,b) => a.dueMinutes - b.dueMinutes);
+      const n = deps[0];
+      html += `<div class="route-card" data-route="${r}" style="margin-bottom:8px"><div class="rc-badge" style="background:${rt.color}">${r}</div><div class="rc-info"><div class="rc-name">${rt.name}</div>${n ? `<div class="rc-next"><span class="rc-time">${n.dueMinutes}</span><span class="rc-unit">min</span></div>` : '<div class="rc-next" style="font-size:12px;color:var(--muted)">None</div>'}</div><span class="rc-arrow">›</span></div>`;
     }
-    this.currentStopId = null;
-    // Scroll back to top
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    c.innerHTML = html;
+    c.querySelectorAll(".route-card").forEach(el => el.addEventListener("click", () => App.showSchedule(el.dataset.route)));
   },
 
-  // ── Nearby View ─────────────────────────────────────────────────
-  async renderNearby() {
-    const container = document.getElementById("stopSelector");
-    container.style.display = "";
-    container.innerHTML = '<div class="loading">📍 Loading nearby stops…</div>';
-
-    try {
-      const data = await ApiClient.getNearby();
-      container.innerHTML = '<div class="nearby-list" id="nearbyList"></div>';
-      const list = document.getElementById("nearbyList");
-
-      data.stops.forEach((item) => {
-        list.appendChild(Components.nearbyGroup(item));
-      });
-    } catch (e) {
-      container.innerHTML = `<div class="loading">⚠️ Error loading nearby stops</div>`;
-    }
+  switchView(v) {
+    if (v === "routes") this.showRoutes();
+    else if (v === "luas") this.showLuasList();
+    else if (v === "saved") this.showSaved();
   },
 
-  // ── Routes View ─────────────────────────────────────────────────
-  async renderRoutes() {
-    const container = document.getElementById("stopSelector");
-    container.style.display = "";
-    container.innerHTML = '<div class="loading">🗺️ Loading routes…</div>';
-
-    try {
-      const routes = await ApiClient.getRoutes();
-      container.innerHTML = '<div class="routes-list" id="routesList"></div>';
-      const list = document.getElementById("routesList");
-
-      routes.forEach((route) => {
-        list.appendChild(Components.routeCard(route));
-      });
-    } catch (e) {
-      container.innerHTML = `<div class="loading">⚠️ Error loading routes</div>`;
-    }
-  },
-
-  // ── Auto Refresh ────────────────────────────────────────────────
-  startAutoRefresh() {
-    setInterval(() => {
-      if (this.currentStopId) {
-        this.loadDepartures(this.currentStopId);
-      }
-      this.updateNextBusTile();
-    }, 30000); // Refresh every 30 seconds
-  },
-
-  // ── Status ──────────────────────────────────────────────────────
-  updateStatusTime() {
-    document.getElementById("statusTime").textContent =
-      new Date().toLocaleTimeString("en-IE", { hour: "2-digit", minute: "2-digit" });
-  },
-
-  async loadStatus() {
-    try {
-      const status = await ApiClient.getStatus();
-      const ds = document.getElementById("dataSourceInfo");
-      if (ds) {
-        const busStatus = status.busMode === "live" ? "Live 🟢" : "Demo 🎯";
-        ds.innerHTML = `<strong>🚊 Luas:</strong> Live real-time data ✅<br><strong>🚌 Buses:</strong> ${busStatus} — ${status.apiKeyConfigured ? "Using your API key" : "Tap ⚙️ to add an NTA API key for live bus data"}`;
-      }
-    } catch (e) { /* ignore */ }
-  },
-
-  async loadApiKeyStatus() {
-    try {
-      const data = await ApiClient.checkApiKey();
-      const statusEl = document.getElementById("apiKeyStatus");
-      const inputEl = document.getElementById("apiKeyInput");
-      if (data.configured) {
-        statusEl.innerHTML = "✅ Live bus data is enabled!";
-        inputEl.placeholder = "API key already configured";
-      } else {
-        statusEl.innerHTML = "";
-      }
-    } catch (e) { /* ignore */ }
-  },
-
-  async saveApiKey() {
-    const input = document.getElementById("apiKeyInput");
-    const key = input.value.trim();
-    const statusEl = document.getElementById("apiKeyStatus");
-
-    if (!key) {
-      statusEl.innerHTML = "⚠️ Please enter an API key";
-      return;
-    }
-
-    try {
-      const result = await ApiClient.saveApiKey(key);
-      if (result.success) {
-        statusEl.innerHTML = "✅ Key saved! Bus data is now live. Refresh to see real times.";
-        input.value = "";
-        Utils.toast("🎉 Live bus data enabled!");
-      } else {
-        statusEl.innerHTML = "⚠️ " + (result.error || "Failed to save key");
-      }
-    } catch (e) {
-      statusEl.innerHTML = "⚠️ Error saving key";
-    }
+  saveApiKey() {
+    const k = document.getElementById("apiKeyInput").value.trim();
+    if (!k) { document.getElementById("apiKeyStatus").textContent = "⚠️ Enter a key"; return; }
+    localStorage.setItem("btl_nta_key", k);
+    document.getElementById("apiKeyStatus").textContent = "✅ Saved (needs server proxy for live data)";
+    Utils.toast("Key saved"); document.getElementById("apiKeyInput").value = "";
   },
 };
 
-// ── Boot ──────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => App.init());

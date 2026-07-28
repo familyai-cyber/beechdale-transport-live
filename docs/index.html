@@ -1,107 +1,113 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#004C98" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="Beechdale Bus" />
-  <link rel="manifest" href="/beechdale-transport-live/assets/manifest.json" />
-  <link rel="apple-touch-icon" href="/beechdale-transport-live/assets/icons/icon-192.svg" />
-  <title>Beechdale Transport Live</title>
-  <link rel="stylesheet" href="/beechdale-transport-live/css/style.css" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#004C98" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Next Bus" />
+<link rel="manifest" href="/beechdale-transport-live/assets/manifest.json" />
+<link rel="apple-touch-icon" href="/beechdale-transport-live/assets/icons/icon-192.svg" />
+<title>Next Bus — Beechdale Transport</title>
+<link rel="stylesheet" href="/beechdale-transport-live/css/style.css" />
 </head>
 <body>
-  <div id="statusBar" class="status-bar">
-    <span id="statusText">Live</span>
-    <span id="statusDot" class="status-dot"></span>
-    <span id="statusTime"></span>
+
+<!-- ═══ Status ═══ -->
+<div class="status">
+  <span class="status-data" id="statusData">Luas Live</span>
+  <span class="status-time" id="statusTime"></span>
+</div>
+
+<!-- ═══ Header ═══ -->
+<header class="header">
+  <h1 class="header-title">
+    <span class="header-icon">🚌</span>
+    <span>Next Bus</span>
+  </h1>
+  <div class="header-actions">
+    <button id="settingsBtn" class="hdr-btn" aria-label="Settings">⚙️</button>
+    <button id="infoBtn" class="hdr-btn" aria-label="About">ⓘ</button>
   </div>
-  <header class="app-header">
-    <div class="header-top">
-      <div class="header-greeting" id="headerGreeting">
-        <span class="greeting-icon">👋</span>
-        <span class="greeting-text" id="greetingText">Good afternoon</span>
-      </div>
-      <h1 class="app-title">
-        <span class="title-icon">🚌</span>
-        <span class="title-text">Beechdale<span class="title-light"> Transport</span></span>
-      </h1>
-      <div class="header-actions">
-        <button id="themeToggle" class="icon-btn" aria-label="Toggle theme">🌙</button>
-        <button id="settingsBtn" class="icon-btn" aria-label="Settings">⚙️</button>
-        <button id="infoBtn" class="icon-btn" aria-label="About">ℹ️</button>
-      </div>
+</header>
+
+<!-- ═══ Hero: Next departure (massive) ═══ -->
+<section class="hero" id="heroSection">
+  <div class="hero-badge" id="heroBadge">Next Departure</div>
+  <div class="hero-route" id="heroRoute">15</div>
+  <div class="hero-dest" id="heroDest">City Centre</div>
+  <div class="hero-countdown" id="heroCountdown">--</div>
+  <div class="hero-sub" id="heroSub">tap for all times</div>
+  <div class="hero-stop" id="heroStop">Beechdale Avenue</div>
+</section>
+
+<!-- ═══ Route Cards ═══ -->
+<section class="routes" id="routesList"></section>
+
+<!-- ═══ Schedule Detail (hidden) ═══ -->
+<section class="schedule" id="scheduleView" style="display:none">
+  <div class="schedule-header">
+    <button id="schBack" class="sch-back">← Back</button>
+    <div>
+      <div class="sch-title" id="schTitle">Route 15</div>
+      <div class="sch-sub" id="schSub">Ballycullen – Clongriffin</div>
     </div>
-    <div class="header-subtitle">Real-time departures • Ballycullen • Dublin 24</div>
-  </header>
-  <div class="nextbus-hero" id="nextBusHero">
-    <div class="nextbus-header">
-      <span class="nextbus-label">⏱ Next Departure</span>
-      <span class="nextbus-source" id="nextBusSource">Demo</span>
-    </div>
-    <div class="nextbus-body" id="nextBusBody"><div class="nextbus-loading">Loading…</div></div>
   </div>
-  <nav class="route-pills" id="routePills">
-    <button class="pill active" data-route="all">All Routes</button>
-    <button class="pill" data-route="15" style="--pill-color:#004C98">15</button>
-    <button class="pill" data-route="49" style="--pill-color:#B2005E">49</button>
-    <button class="pill" data-route="65b" style="--pill-color:#00A54F">65b</button>
-  </nav>
-  <div class="faves-bar" id="favesBar" style="display:none">
-    <span class="faves-label">⭐ Favourites</span>
-    <div class="faves-list" id="favesList"></div>
+  <div class="schedule-body" id="schBody">
+    <div class="loading">Loading…</div>
   </div>
-  <main class="main-content" id="mainContent">
-    <section class="stop-selector" id="stopSelector">
-      <div class="search-box">
-        <span class="search-icon">🔍</span>
-        <input type="text" id="stopSearch" placeholder="Search stops, routes..." autocomplete="off" />
-      </div>
-      <div class="stops-grid" id="stopsGrid"></div>
-    </section>
-    <section class="departure-section" id="departureSection" style="display:none">
-      <div class="departure-header">
-        <button id="backBtn" class="back-btn">← Back</button>
-        <div class="dep-stop-info">
-          <h2 id="depStopName"></h2>
-          <span id="depStopDesc" class="dep-stop-desc"></span>
-        </div>
-      </div>
-      <div id="stopMap" class="stop-map" style="display:none;"></div>
-      <div class="departure-board" id="departureBoard"><div class="loading">Loading departures…</div></div>
-    </section>
-  </main>
-  <nav class="bottom-nav" id="bottomNav">
-    <button class="nav-btn active" data-view="stops"><span class="nav-icon">🚏</span><span class="nav-label">Bus</span></button>
-    <button class="nav-btn" data-view="luas"><span class="nav-icon">🚊</span><span class="nav-label">Luas</span></button>
-    <button class="nav-btn" data-view="nearby"><span class="nav-icon">📍</span><span class="nav-label">All</span></button>
-    <button class="nav-btn" data-view="routes"><span class="nav-icon">🗺️</span><span class="nav-label">Routes</span></button>
-  </nav>
-  <div class="modal-overlay" id="infoModal" style="display:none"><div class="modal">
-    <button class="modal-close" id="modalClose">&times;</button>
-    <h2>About</h2>
-    <p><strong>Beechdale Transport Live</strong> — real-time transport for Beechdale / Ballycullen, Dublin 24.</p>
-    <h3>Routes</h3>
-    <ul><li><span class="route-badge" style="background:#004C98">15</span> Ballycullen – Clongriffin</li><li><span class="route-badge" style="background:#B2005E">49</span> Tallaght – Pearse Street</li><li><span class="route-badge" style="background:#00A54F">65b</span> Ballycullen – Poolbeg Street</li></ul>
-    <h3>Data</h3>
-    <p id="dataSourceInfo"><strong>🚊 Luas:</strong> Live ✅<br><strong>🚌 Buses:</strong> Demo mode</p>
-    <p class="small">Luas via <a href="https://luasforecasts.rpa.ie">RPA</a> • Bus via <a href="https://developer.nationaltransport.ie/">NTA GTFS-R</a></p>
-  </div></div>
-  <div class="modal-overlay" id="settingsModal" style="display:none"><div class="modal">
-    <button class="modal-close" id="settingsModalClose">&times;</button>
-    <h2>⚙️ Settings</h2>
-    <p style="font-size:13px;margin-bottom:12px;">Bus data is in demo mode. Get a free NTA GTFS-R API key for live data.</p>
-    <input type="text" id="apiKeyInput" placeholder="Paste API key..." style="width:100%;padding:10px;border:2px solid var(--border);border-radius:var(--radius-sm);font-size:14px;outline:none;background:var(--bg-primary);color:var(--text-primary);" />
-    <button id="saveApiKeyBtn" style="width:100%;margin-top:8px;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;cursor:pointer;">Save Key</button>
-    <div id="apiKeyStatus" style="margin-top:8px;font-size:13px;color:var(--text-muted);"></div>
-    <p style="font-size:12px;margin-top:12px;">Get a free key at <a href="https://developer.nationaltransport.ie/" target="_blank">developer.nationaltransport.ie</a></p>
-  </div></div>
-  <div id="toast" class="toast"></div>
-  <script src="/beechdale-transport-live/js/data.js"></script>
-  <script src="/beechdale-transport-live/js/utils.js"></script>
-  <script src="/beechdale-transport-live/js/api-client.js"></script>
-  <script src="/beechdale-transport-live/js/components.js"></script>
-  <script src="/beechdale-transport-live/js/app.js"></script>
+</section>
+
+<!-- ═══ Luas View (hidden) ═══ -->
+<section class="luas-view" id="luasView" style="display:none">
+  <div class="luas-header">
+    <div class="luas-title">🚊 Luas — Green Line</div>
+    <span class="live-badge">LIVE</span>
+  </div>
+  <div class="luas-grid" id="luasGrid"></div>
+  <div class="luas-detail" id="luasDetail" style="display:none">
+    <button id="luasBack" class="sch-back">← Back</button>
+    <div class="luas-forecast" id="luasForecast"></div>
+  </div>
+</section>
+
+<!-- ═══ Saved View (hidden) ═══ -->
+<section class="saved-view" id="savedView" style="display:none">
+  <div class="luas-title">⭐ Saved Routes</div>
+  <div id="savedContent">
+    <div class="empty-state">Tap the ★ on any route to save it here</div>
+  </div>
+</section>
+
+<!-- ═══ Bottom Nav ═══ -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" data-view="routes"><span class="nav-icon">🚏</span><span class="nav-label">Routes</span></button>
+  <button class="nav-btn" data-view="luas"><span class="nav-icon">🚊</span><span class="nav-label">Luas</span></button>
+  <button class="nav-btn" data-view="saved"><span class="nav-icon">⭐</span><span class="nav-label">Saved</span></button>
+</nav>
+
+<!-- ═══ Modals ═══ -->
+<div class="modal-overlay" id="infoModal" style="display:none"><div class="modal">
+  <button class="modal-close" id="modalClose">&times;</button>
+  <h2>Next Bus</h2>
+  <p>Real-time departures for Beechdale, Ballycullen, Dublin 24.</p>
+  <h3>Routes</h3>
+  <ul><li><span class="badge" style="background:#004C98">15</span> Ballycullen – Clongriffin</li><li><span class="badge" style="background:#B2005E">49</span> Tallaght – Pearse Street</li><li><span class="badge" style="background:#00A54F">65b</span> Ballycullen – Poolbeg Street</li></ul>
+  <p class="small">Bus data: Demo mode. Luas: Live. Get an NTA API key for live bus data.</p>
+</div></div>
+<div class="modal-overlay" id="settingsModal" style="display:none"><div class="modal">
+  <button class="modal-close" id="settingsModalClose">&times;</button>
+  <h2>⚙️ Settings</h2>
+  <p style="font-size:13px;">For live bus data, get a free key at <a href="https://developer.nationaltransport.ie" target="_blank">developer.nationaltransport.ie</a></p>
+  <input type="text" id="apiKeyInput" placeholder="Paste API key..." class="api-input" />
+  <button id="saveApiKeyBtn" class="api-btn">Save</button>
+  <div id="apiKeyStatus" style="font-size:12px;margin-top:6px;color:var(--muted);"></div>
+</div></div>
+<div id="toast" class="toast"></div>
+
+<script src="/beechdale-transport-live/js/data.js"></script>
+<script src="/beechdale-transport-live/js/utils.js"></script>
+<script src="/beechdale-transport-live/js/components.js"></script>
+<script src="/beechdale-transport-live/js/app.js"></script>
 </body>
 </html>
