@@ -52,24 +52,38 @@ USE_MOCK_DATA=false
 
 ## Deploying
 
-### Option 1: Deploy to Railway / Render / Fly.io
+### One-click Deploy (Recommended)
 
-1. Push this folder to a GitHub repo
-2. Connect to Railway or Render
-3. Set the start command: `npm start`
-4. Add your `TFI_API_KEY` as an environment variable
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/familyai-cyber/beechdale-transport-live)
 
-### Option 2: Deploy to a VPS
+Or manually via the [Render Dashboard](https://dashboard.render.com/):
+1. Click **New +** → **Blueprint**
+2. Connect your GitHub repo
+3. Render auto-detects the `render.yaml` config
+
+### Deploy to Railway
+
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/Uu6I3G?referralCode=beechdale)
+
+### Deploy to Fly.io
+
+```bash
+fly launch
+fly deploy
+```
+
+### Deploy to a VPS
 
 ```bash
 npm install -g pm2
 pm2 start server.js --name beechdale-transport
 ```
 
-### Option 3: Local network (for testing on phone)
+### Local network (for testing on phone)
 
 ```bash
 # Find your local IP (e.g. 192.168.1.10)
+ipconfig
 # Then on your phone, visit:
 http://192.168.1.10:3001
 ```
