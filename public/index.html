@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#004C98" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Beechdale Bus" />
+  <link rel="manifest" href="/assets/manifest.json" />
+  <link rel="apple-touch-icon" href="/assets/icons/icon-192.png" />
+  <title>Beechdale Transport Live</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <!-- Status Bar -->
+  <div id="statusBar" class="status-bar">
+    <span id="statusText">Live</span>
+    <span id="statusDot" class="status-dot"></span>
+    <span id="statusTime"></span>
+  </div>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-top">
+      <div class="header-greeting" id="headerGreeting">
+        <span class="greeting-icon">👋</span>
+        <span class="greeting-text" id="greetingText">Good afternoon</span>
+      </div>
+      <h1 class="app-title">
+        <span class="title-icon">🚌</span>
+        <span class="title-text">Beechdale<span class="title-light"> Transport</span></span>
+      </h1>
+      <div class="header-actions">
+        <button id="themeToggle" class="icon-btn" aria-label="Toggle theme">🌙</button>
+        <button id="settingsBtn" class="icon-btn" aria-label="Settings">⚙️</button>
+        <button id="infoBtn" class="icon-btn" aria-label="About">ℹ️</button>
+      </div>
+    </div>
+    <div class="header-subtitle">Real-time departures • Ballycullen • Dublin 24</div>
+  </header>
+
+  <!-- Next Bus Hero Tile -->
+  <div class="nextbus-hero" id="nextBusHero">
+    <div class="nextbus-header">
+      <span class="nextbus-label">⏱ Next Departure</span>
+      <span class="nextbus-source" id="nextBusSource">Live</span>
+    </div>
+    <div class="nextbus-body" id="nextBusBody">
+      <div class="nextbus-loading">Loading next bus…</div>
+    </div>
+  </div>
+
+  <!-- Route Pills -->
+  <nav class="route-pills" id="routePills">
+    <button class="pill active" data-route="all">All Routes</button>
+    <button class="pill" data-route="15" style="--pill-color:#004C98">15</button>
+    <button class="pill" data-route="49" style="--pill-color:#B2005E">49</button>
+    <button class="pill" data-route="65b" style="--pill-color:#00A54F">65b</button>
+  </nav>
+
+  <!-- Favourites Bar -->
+  <div class="faves-bar" id="favesBar" style="display:none">
+    <span class="faves-label">⭐ Favourites</span>
+    <div class="faves-list" id="favesList"></div>
+  </div>
+
+  <!-- Main Content -->
+  <main class="main-content" id="mainContent">
+
+    <!-- Bus Stops View -->
+    <section class="stop-selector" id="stopSelector">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="stopSearch" placeholder="Search stops, routes..." autocomplete="off" />
+      </div>
+      <div class="stops-grid" id="stopsGrid"></div>
+    </section>
+
+    <!-- Departure Board View -->
+    <section class="departure-section" id="departureSection" style="display:none">
+      <div class="departure-header">
+        <button id="backBtn" class="back-btn">← Back</button>
+        <div class="dep-stop-info">
+          <h2 id="depStopName"></h2>
+          <span id="depStopDesc" class="dep-stop-desc"></span>
+        </div>
+      </div>
+
+      <!-- Map Container -->
+      <div id="stopMap" class="stop-map" style="display:none;"></div>
+
+      <div class="departure-board" id="departureBoard">
+        <div class="loading">Loading departures…</div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav" id="bottomNav">
+    <button class="nav-btn active" data-view="stops">
+      <span class="nav-icon">🚏</span>
+      <span class="nav-label">Bus</span>
+    </button>
+    <button class="nav-btn" data-view="luas">
+      <span class="nav-icon">🚊</span>
+      <span class="nav-label">Luas</span>
+    </button>
+    <button class="nav-btn" data-view="nearby">
+      <span class="nav-icon">📍</span>
+      <span class="nav-label">All</span>
+    </button>
+    <button class="nav-btn" data-view="routes">
+      <span class="nav-icon">🗺️</span>
+      <span class="nav-label">Routes</span>
+    </button>
+  </nav>
+
+  <!-- Info Modal -->
+  <div class="modal-overlay" id="infoModal" style="display:none">
+    <div class="modal">
+      <button class="modal-close" id="modalClose">&times;</button>
+      <h2>About</h2>
+      <p><strong>Beechdale Transport Live</strong> provides real-time public transport for the Beechdale / Ballycullen area, Dublin 24.</p>
+      <h3>Routes</h3>
+      <ul class="about-routes">
+        <li><span class="route-badge" style="background:#004C98">15</span> Ballycullen – Clongriffin</li>
+        <li><span class="route-badge" style="background:#B2005E">49</span> Tallaght – Pearse Street</li>
+        <li><span class="route-badge" style="background:#00A54F">65b</span> Ballycullen – Poolbeg Street</li>
+      </ul>
+      <h3>Data Sources</h3>
+      <p id="dataSourceInfo"><strong>🚊 Luas:</strong> Live real-time data ✅<br><strong>🚌 Buses:</strong> Demo mode</p>
+      <p class="small">Luas via <a href="https://luasforecasts.rpa.ie" target="_blank">RPA</a> • Bus via <a href="https://developer.nationaltransport.ie/" target="_blank">NTA GTFS-R</a></p>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="settingsModal" style="display:none">
+    <div class="modal">
+      <button class="modal-close" id="settingsModalClose">&times;</button>
+      <h2>⚙️ Settings</h2>
+      <h3>🚌 Live Bus Data</h3>
+      <p style="font-size:13px;margin-bottom:12px;">Bus times are in <strong>demo mode</strong>. For live data, get a free NTA GTFS-R API key.</p>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">NTA GTFS-R API Key</label>
+        <input type="text" id="apiKeyInput" placeholder="Paste your API key..." style="width:100%;padding:10px 12px;border:2px solid var(--border);border-radius:var(--radius-sm);font-size:14px;background:var(--bg-primary);color:var(--text-primary);outline:none;" />
+      </div>
+      <button id="saveApiKeyBtn" style="width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;cursor:pointer;">Save Key & Enable Live Data</button>
+      <div id="apiKeyStatus" style="margin-top:8px;font-size:13px;color:var(--text-muted);"></div>
+      <h3 style="margin-top:16px;">🔑 Get a Free Key</h3>
+      <div style="padding:10px 12px;background:var(--bg-pill);border-radius:var(--radius-sm);font-size:12px;line-height:1.6;">
+        <strong>1.</strong> Go to <a href="https://developer.nationaltransport.ie/" target="_blank">developer.nationaltransport.ie</a> → <strong>Sign up</strong><br>
+        <strong>2.</strong> Subscribe to <strong>GTFS-R</strong> API (free)<br>
+        <strong>3.</strong> Copy your key and paste it above
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <script src="/js/utils.js"></script>
+  <script src="/js/api-client.js"></script>
+  <script src="/js/components.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
