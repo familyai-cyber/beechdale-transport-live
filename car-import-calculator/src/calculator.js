@@ -70,6 +70,8 @@ function importVatApplies(origin) {
  */
 function wltpCo2(co2, co2Standard, fuelType) {
   const c = Number(co2) || 0;
+  // EVs are 0 g/km under every test cycle — never apply the NEDC→WLTP uplift.
+  if (fuelType === "electric" || c === 0) return 0;
   if (co2Standard !== "nedc") return c;
   const f = fuelType === "diesel" ? config.nedcToWltp.diesel : config.nedcToWltp.other;
   return Math.round(c * f.slope + f.intercept);

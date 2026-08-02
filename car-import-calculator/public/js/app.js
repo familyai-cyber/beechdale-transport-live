@@ -131,6 +131,12 @@ function validate() {
   const p = Number(document.getElementById("uk-price").value);
   if (!p || p <= 0) return "Please enter a valid UK purchase price in £.";
   const c = document.getElementById("co2").value;
+  const fuel = document.getElementById("fuel-type").value;
+  // EVs emit 0 g/km — a blank or 0 CO₂ is valid and needs no figure from the V5C.
+  if (fuel === "electric") {
+    if (c === "") document.getElementById("co2").value = "0";
+    return null;
+  }
   if (c === "" || Number(c) < 0 || Number.isNaN(Number(c))) return "Please enter the CO₂ figure (g/km) from the V5C.";
   return null;
 }
@@ -423,6 +429,7 @@ function fillFromListing(r) {
       el.classList.add("flash");
     }
   };
+  const notes = [];
 
   if (r.make) setVal("make", r.make);
   if (r.model) setVal("model", r.model);
@@ -434,19 +441,39 @@ function fillFromListing(r) {
   if (!priceGBP && r.priceEUR) priceGBP = Math.round(r.priceEUR / 1.163);
   if (priceGBP) setVal("uk-price", String(Math.round(priceGBP)));
 
-  if (r.co2) setVal("co2", String(Math.round(r.co2)));
+  // CO₂ — includes 0 for EVs (the parser sets co2=0 for electric cars).
+  if (r.co2 != null) setVal("co2", String(Math.round(r.co2)));
+
   if (r.fuelType) {
     const el = document.getElementById("fuel-type");
     if (el && ["petrol", "diesel", "hybrid", "electric"].includes(r.fuelType)) {
       el.value = r.fuelType;
     }
   }
+  // EVs emit 0 g/km — if the advert didn't state a figure, fill it in.
+  if (r.fuelType === "electric" && r.co2 == null) setVal("co2", "0");
+
   if (r.origin) {
     const o = document.querySelector(`input[name="origin"][value="${r.origin === "NI" ? "NI" : "GB"}"]`);
-    if (o) o.checked = true;
+    if (o) {
+      o.checked = true;
+      notes.push(r.origin === "NI" ? "NI-registered — no duty or import VAT" : "GB-registered — duty & import VAT apply");
+    }
   }
+
+  // VAT-qualifying advert (dealer sale) → the buyer is likely a VAT-registered
+  // company that can reclaim the import VAT. Auto-select the dealer option.
+  if (r.vatQualified === true) {
+    const b = document.querySelector('input[name="buyerType"][value="vat-dealer"]');
+    if (b) {
+      b.checked = true;
+      notes.push("VAT-qualifying sale — dealer import selected");
+    }
+  }
+
   refreshHints();
   persist();
+  return notes;
 }
 
 function autoCalculateIfReady() {
@@ -454,7 +481,11 @@ function autoCalculateIfReady() {
     const v = document.getElementById(id).value;
     return v !== "" && Number(v) > 0;
   };
-  if (has("year") && has("uk-price") && has("co2")) {
+  // CO₂ is "present" when non-zero, OR when the car is an EV (0 g/km is valid).
+  const fuel = document.getElementById("fuel-type").value;
+  const co2 = document.getElementById("co2").value;
+  const co2Ok = fuel === "electric" ? co2 !== "" : co2 !== "" && Number(co2) > 0;
+  if (has("year") && has("uk-price") && co2Ok) {
     form.requestSubmit();
     return true;
   }
@@ -531,11 +562,12 @@ async function extractFromUrl() {
       return;
     }
 
-    fillFromListing(extracted);
+    const notes = fillFromListing(extracted) || [];
     const parts = [extracted.make, extracted.model, extracted.year, `£${Math.round(extracted.priceGBP)}`]
       .filter(Boolean).join(" · ");
     const missing = [];
-    if (!extracted.co2) missing.push("CO₂");
+    // EVs emit 0 g/km — co2=0 (or null with fuelType electric) means no figure needed.
+    if (extracted.co2 == null && extracted.fuelType !== "electric") missing.push("CO₂");
     if (!extracted.origin) missing.push("origin");
 
     if (missing.length) {
@@ -559,13 +591,14 @@ async function extractFromUrl() {
 
     setChip("ok", `Extracted: ${parts}.`);
     const lowConfidence = (extracted.sources && extracted.sources.includes("url")) || (extracted.confidence != null && extracted.confidence < 0.5);
+    const noteText = notes.length ? " " + notes.join(" · ") : "";
     if (lowConfidence) {
-      extractHintMsg("Most of this was read from the listing link — please double-check the details above.");
+      extractHintMsg("Most of this was read from the listing link — please double-check the details above." + noteText);
     } else {
-      extractHintMsg("");
+      extractHintMsg(noteText.trim());
     }
     if (!autoCalculateIfReady()) {
-      extractHintMsg(lowConfidence ? "Details above were read from the link — double-check them, then press Calculate." : "Check the details above, then press Calculate.");
+      extractHintMsg((lowConfidence ? "Details above were read from the link — double-check them, then press Calculate." : "Check the details above, then press Calculate.") + noteText);
     }
   } catch (err2) {
     setChip("error", "Couldn't reach that listing. The site may be blocking automated requests — please enter the details manually.");

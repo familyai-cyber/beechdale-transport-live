@@ -281,6 +281,22 @@ function detectFuelType(text) {
 }
 
 // ---------------------------------------------------------------------------
+// VAT-qualifying detection ("VAT Qualifying" badge on Autotrader / dealer ads)
+// ---------------------------------------------------------------------------
+// Returns true when the advert indicates a VAT-registered seller whose sale
+// price can be treated as VAT-inclusive/reclaimable, false when the sale is
+// explicitly not VAT-qualifying ("No VAT", "Ex VAT", "VAT not applicable"),
+// and null when the advert says nothing either way.
+function detectVatQualified(text) {
+  const t = String(text || '').toLowerCase();
+  // Strong negative ("No VAT", "Ex VAT") is decisive — it wins over a badge
+  // mention like "VAT Qualifying offers welcome" elsewhere on the page.
+  if (/\bno\s*vat\b|\bex\s*[- ]?vat\b|\bvat[ -]?not\s*(?:applicable|included|charged)\b|\boutside\s*vat\b|\bvat[ -]?free\b/.test(t)) return false;
+  if (/\bvat[ -]?qualif\w*\b|\bvat[ -]?inclusive\b|\bvat[ -]?included\b|\bvat[ -]?charged\b|\binc\.?\s*vat\b|\bincludes? vat\b/.test(t)) return true;
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Origin detection (GB mainland vs Northern Ireland)
 // ---------------------------------------------------------------------------
 function detectOrigin(url, html) {
@@ -394,7 +410,7 @@ function extractListing(url, html, opts) {
     .trim();
 
   const sources = [];
-  const found = { make: '', model: '', year: null, price: null, currency: null, co2: null, fuelType: null, origin: null };
+  const found = { make: '', model: '', year: null, price: null, currency: null, co2: null, fuelType: null, origin: null, vatQualified: null };
 
   // --- JSON-LD (most structured) ---
   const ld = extractJsonLd(html);
@@ -468,10 +484,17 @@ function extractListing(url, html, opts) {
   }
 
   // --- CO2 & fuel ---
-  if (found.co2 == null) found.co2 = extractCo2(visible) || extractCo2(cleanTitle);
-  if (found.co2) sources.push('co2');
   if (found.fuelType == null) found.fuelType = detectFuelType(visible + ' ' + cleanTitle);
   if (found.fuelType) sources.push('fuel');
+  if (found.co2 == null) found.co2 = extractCo2(visible) || extractCo2(cleanTitle);
+  // EVs emit 0 g/km by definition — the advert may only say "Electric / Zero
+  // emissions / Range (WLTP)" with no CO2 figure, so treat them as 0.
+  if (found.co2 == null && found.fuelType === 'electric') found.co2 = 0;
+  if (found.co2 != null) sources.push('co2');
+
+  // --- VAT-qualifying (dealer VAT-inclusive sale; buyer may reclaim) ---
+  found.vatQualified = detectVatQualified(visible + ' ' + cleanTitle);
+  if (found.vatQualified != null) sources.push('vat');
 
   // --- Origin ---
   const origin = detectOrigin(url, html);
@@ -511,6 +534,7 @@ function extractListing(url, html, opts) {
     currency: found.currency,
     co2: found.co2,
     fuelType: found.fuelType,
+    vatQualified: found.vatQualified,
     origin,
     title: cleanTitle || null,
     fxRateUsed,
@@ -520,4 +544,4 @@ function extractListing(url, html, opts) {
   return result;
 }
 
-module.exports = { extractListing, parsePrice, parseYear, extractCo2, detectOrigin, detectFuelType, MAKES };
+module.exports = { extractListing, parsePrice, parseYear, extractCo2, detectOrigin, detectFuelType, detectVatQualified, MAKES };

@@ -14,6 +14,7 @@ const {
   extractCo2,
   detectOrigin,
   detectFuelType,
+  detectVatQualified,
 } = require("../src/listing-parser");
 
 let passed = 0;
@@ -194,6 +195,29 @@ check("detectFuelType: hybrid", () => {
   assert.strictEqual(detectFuelType("Hybrid"), "hybrid");
 });
 
+// ── detectVatQualified ──────────────────────────────────────────────────
+check("detectVatQualified: 'VAT Qualifying' → true", () => {
+  assert.strictEqual(detectVatQualified("This car is VAT Qualifying for business buyers"), true);
+});
+check("detectVatQualified: 'VAT inclusive' → true", () => {
+  assert.strictEqual(detectVatQualified("Price includes VAT"), true);
+});
+check("detectVatQualified: 'No VAT' → false", () => {
+  assert.strictEqual(detectVatQualified("No VAT to pay"), false);
+});
+check("detectVatQualified: 'Ex VAT' → false", () => {
+  assert.strictEqual(detectVatQualified("Ex VAT £9,000"), false);
+});
+check("detectVatQualified: silence → null", () => {
+  assert.strictEqual(detectVatQualified("Private sale, low mileage, one owner"), null);
+});
+check("detectVatQualified: 'VAT not applicable' → false", () => {
+  assert.strictEqual(detectVatQualified("VAT not applicable on this vehicle"), false);
+});
+check("detectVatQualified: negative signal wins over positive", () => {
+  assert.strictEqual(detectVatQualified("VAT qualifying offers welcome, no VAT included"), false);
+});
+
 // ── detectOrigin ─────────────────────────────────────────────────────────
 check("detectOrigin: NI plate ABC 1234", () => {
   assert.strictEqual(detectOrigin("https://www.carsni.com/ford", "Reg: ABC 1234"), "NI");
@@ -332,6 +356,66 @@ check("usedcarsni: JSON-LD price with no currency falls back to visible text", (
   const r = extractListing("https://www.usedcarsni.com/2022-Porsche-Taycan-350kW-4-93kWh-5dr-Auto-399157019", html, { fxRate: FX });
   assert.strictEqual(r.priceGBP, 49440);
   assert.strictEqual(r.currency, "GBP");
+});
+
+// ── EV CO₂ auto-fill ────────────────────────────────────────────────────
+check("usedcarsni EV: co2 = 0 when no figure published", () => {
+  const r = extractListing("https://www.usedcarsni.com/2022-Porsche-Taycan", USEDCARSNI_HTML, { fxRate: FX });
+  assert.strictEqual(r.fuelType, "electric");
+  assert.strictEqual(r.co2, 0);
+  assert.ok(r.sources.includes("co2"), "sources=" + r.sources);
+});
+
+// ── VAT-qualifying end-to-end ───────────────────────────────────────────
+const VAT_QUALIFIED_HTML = `
+<html>
+<head>
+  <title>2021 Audi A6 45 TDI for sale - Dealer Motors</title>
+  <meta property="og:title" content="2021 Audi A6 45 TDI">
+  <meta property="og:price:amount" content="27995">
+  <meta property="og:price:currency" content="GBP">
+</head>
+<body>
+  <div class="badge">VAT Qualifying</div>
+  <p>Reg: GU 21 XYZ</p>
+  <p>CO2: 142 g/km</p>
+  <p>Diesel</p>
+</body>
+</html>
+`;
+
+check("VAT-qualifying advert: vatQualified=true + GB origin", () => {
+  const r = extractListing("https://www.autotrader.co.uk/car-details/42", VAT_QUALIFIED_HTML, { fxRate: FX });
+  assert.strictEqual(r.vatQualified, true);
+  assert.strictEqual(r.origin, "GB");
+  assert.ok(r.sources.includes("vat"), "sources=" + r.sources);
+});
+
+const NO_VAT_HTML = `
+<html>
+<head>
+  <title>2017 Ford Kuga Zetec private sale</title>
+  <meta property="og:title" content="2017 Ford Kuga Zetec">
+  <meta property="og:price:amount" content="10995">
+  <meta property="og:price:currency" content="GBP">
+</head>
+<body>
+  <p>No VAT — private seller.</p>
+  <p>Reg: SJ 17 ABC</p>
+</body>
+</html>
+`;
+
+check("no-VAT advert: vatQualified=false", () => {
+  const r = extractListing("https://www.autotrader.co.uk/car-details/43", NO_VAT_HTML, { fxRate: FX });
+  assert.strictEqual(r.vatQualified, false);
+  assert.ok(r.sources.includes("vat"), "sources=" + r.sources);
+});
+
+check("silent advert: vatQualified=null, sources lack 'vat'", () => {
+  const r = extractListing("https://www.carsni.com/focus", NICS_HTML, { fxRate: FX });
+  assert.strictEqual(r.vatQualified, null);
+  assert.ok(!r.sources.includes("vat"), "sources=" + r.sources);
 });
 
 // ── Summary ──────────────────────────────────────────────────────────────
