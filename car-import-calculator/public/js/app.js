@@ -1,116 +1,355 @@
-/* Car Import Cost Calculator – frontend logic */
+﻿/* Car Import Cost Calculator – frontend logic (UX redesign) */
 
 const form = document.getElementById("estimate-form");
 const results = document.getElementById("results");
 const submitBtn = document.getElementById("submit-btn");
+const formError = document.getElementById("form-error");
+const fxBadge = document.getElementById("fx-badge");
+const copyBtn = document.getElementById("copy-btn");
 
-const euro = (n) =>
-  "€" + Number(n).toLocaleString("en-IE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const gbp = (n) =>
-  "£" + Number(n).toLocaleString("en-IE", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const STORAGE_KEY = "carImportCalculator.v1";
 
+const fmt = (n) => "€" + Number(n).toLocaleString("en-IE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt0 = (n) => "€" + Number(n).toLocaleString("en-IE", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const gbp = (n) => "£" + Number(n).toLocaleString("en-IE", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+let fxRate = null; // current live rate
+
+/* ── FX badge (pass-03) ──────────────────────────────────────────── */
+async function loadFx() {
+  fxBadge.classList.add("loading");
+  try {
+    const res = await fetch("/api/fx");
+    const data = await res.json();
+    if (res.ok && data.eurPerGbp) {
+      fxRate = data.eurPerGbp;
+      fxBadge.textContent = `£1 = €${fxRate.toFixed(3)}`;
+      fxBadge.classList.remove("loading");
+      fxBadge.classList.add("live");
+      fxBadge.title = "Live exchange rate (auto-updated). Also shown as £ in the results.";
+    } else {
+      fxBadge.textContent = "FX unavailable – using default";
+      fxBadge.classList.remove("loading");
+    }
+  } catch {
+    fxBadge.textContent = "FX unavailable – using default";
+    fxBadge.classList.remove("loading");
+  }
+}
+
+/* ── Hints (pass-18: quantified origin impact) ───────────────────── */
 const ORIGIN_HINTS = {
-  GB: "GB cars pay 10% customs duty. If first registered on/after 1 Jan 2021, 23% import VAT also applies (unless you can claim UK-origin under the Trade & Cooperation Agreement).",
-  NI: "NI cars are inside the EU customs union & VAT area: no customs duty and no import VAT. You'll still pay VRT when registering in Ireland.",
+  GB: "GB cars pay 10% customs duty and 23% import VAT on the full value — typically €3,000–€7,000+ extra vs a Northern Ireland car. If first registered before 2021 you must still pay VAT under current Revenue rules.",
+  NI: "NI cars are inside the EU customs union & VAT area: no customs duty and no import VAT with the right proof (V5C, NI-registered keeper, NI MOT/insurance). You still pay VRT when registering in Ireland.",
 };
 const BUYER_HINTS = {
-  private: "As a private buyer you pay import VAT (if it applies) as part of the total cost.",
-  "vat-dealer": "A VAT-registered dealer can reclaim import VAT as input VAT, so it's excluded from the net total below.",
+  private: "As a private buyer you pay import VAT (if it applies) as part of the total.",
+  "vat-dealer": "A VAT-registered dealer can reclaim import VAT as input VAT — shown separately as reclaimable below.",
 };
 
 function refreshHints() {
-  document.getElementById("origin-hint").textContent =
-    ORIGIN_HINTS[document.querySelector('input[name="origin"]:checked').value];
-  document.getElementById("buyer-hint").textContent =
-    BUYER_HINTS[document.querySelector('input[name="buyerType"]:checked').value];
+  const origin = document.querySelector('input[name="origin"]:checked').value;
+  const buyer = document.querySelector('input[name="buyerType"]:checked').value;
+  document.getElementById("origin-hint").textContent = ORIGIN_HINTS[origin];
+  document.getElementById("buyer-hint").textContent = BUYER_HINTS[buyer];
 }
 form.addEventListener("change", refreshHints);
-refreshHints();
 
-function fill(id, value) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = value;
+/* ── Error display (pass-02) ─────────────────────────────────────── */
+function showError(msg) {
+  formError.textContent = msg;
+  formError.classList.remove("hidden");
+  formError.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+function clearError() {
+  formError.classList.add("hidden");
+  formError.textContent = "";
+}
+
+/* ── Persistence (pass-08) ───────────────────────────────────────── */
+function persist() {
+  const keys = ["make", "model", "year", "uk-price", "co2", "nox", "shipping", "fuel-type", "co2-standard"];
+  const state = {};
+  keys.forEach((k) => (state[k] = document.getElementById(k).value));
+  state.origin = document.querySelector('input[name="origin"]:checked').value;
+  state.buyerType = document.querySelector('input[name="buyerType"]:checked').value;
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+}
+function restore() {
+  let state;
+  try { state = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch { return; }
+  if (!state) return;
+  const keys = ["make", "model", "year", "uk-price", "co2", "nox", "shipping", "fuel-type", "co2-standard"];
+  keys.forEach((k) => {
+    const el = document.getElementById(k);
+    if (state[k] != null && state[k] !== "") el.value = state[k];
+  });
+  if (state.origin) {
+    const o = document.querySelector(`input[name="origin"][value="${state.origin}"]`);
+    if (o) o.checked = true;
+  }
+  if (state.buyerType) {
+    const b = document.querySelector(`input[name="buyerType"][value="${state.buyerType}"]`);
+    if (b) b.checked = true;
+  }
+}
+
+/* ── Submit ──────────────────────────────────────────────────────── */
+function buildPayload() {
+  const origin = document.querySelector('input[name="origin"]:checked').value;
+  const buyerType = document.querySelector('input[name="buyerType"]:checked').value;
+  return {
+    make: document.getElementById("make").value.trim(),
+    model: document.getElementById("model").value.trim(),
+    firstRegYear: Number(document.getElementById("year").value),
+    ukPriceGBP: Number(document.getElementById("uk-price").value),
+    co2: Number(document.getElementById("co2").value),
+    nox: Number(document.getElementById("nox").value) || 0,
+    origin,
+    buyerType,
+    fuelType: document.getElementById("fuel-type").value,
+    co2Standard: document.getElementById("co2-standard").value,
+    shippingEUR: Number(document.getElementById("shipping").value) || 0,
+    fxRate: fxRate || undefined,
+  };
+}
+
+function validate() {
+  const y = Number(document.getElementById("year").value);
+  if (!y || y < 1990 || y > 2026) return "Please enter a valid year of first registration (1990–2026).";
+  const p = Number(document.getElementById("uk-price").value);
+  if (!p || p <= 0) return "Please enter a valid UK purchase price in £.";
+  const c = document.getElementById("co2").value;
+  if (c === "" || Number(c) < 0 || Number.isNaN(Number(c))) return "Please enter the CO₂ figure (g/km) from the V5C.";
+  return null;
 }
 
 async function submit(e) {
   e.preventDefault();
+  clearError();
+  const err = validate();
+  if (err) { showError(err); return; }
+
   submitBtn.disabled = true;
-  submitBtn.textContent = "Calculating…";
+  submitBtn.classList.add("loading");
+  submitBtn.querySelector(".btn-label").textContent = "Calculating…";
+  results.classList.add("recalculating");
 
   try {
-    const payload = {
-      make: document.getElementById("make").value.trim(),
-      model: document.getElementById("model").value.trim(),
-      firstRegYear: Number(document.getElementById("year").value),
-      ukPriceGBP: Number(document.getElementById("uk-price").value),
-      co2: Number(document.getElementById("co2").value),
-      nox: Number(document.getElementById("nox").value) || 0,
-      origin: document.querySelector('input[name="origin"]:checked').value,
-      buyerType: document.querySelector('input[name="buyerType"]:checked').value,
-      shippingEUR: Number(document.getElementById("shipping").value) || 0,
-    };
-
     const res = await fetch("/api/estimate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(buildPayload()),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Something went wrong");
-
     render(data);
-  } catch (err) {
-    alert(err.message);
+    persist();
+  } catch (err2) {
+    showError(err2.message);
   } finally {
     submitBtn.disabled = false;
-    submitBtn.textContent = "Calculate import cost";
+    submitBtn.classList.remove("loading");
+    submitBtn.querySelector(".btn-label").textContent = "Calculate import cost";
+    results.classList.remove("recalculating");
   }
 }
 
+/* ── Render (pass-04/05/06/07/16/17) ─────────────────────────────── */
+const na = (el) => {
+  const cell = document.createElement("div");
+  cell.className = "value na";
+  cell.textContent = el;
+  return cell;
+};
+const cell = (v, cls) => {
+  const c = document.createElement("div");
+  c.className = "value";
+  if (cls) c.classList.add(cls);
+  c.textContent = v;
+  return c;
+};
+const row = (label, sub, valueEl, cls) => {
+  const r = document.createElement("div");
+  r.className = "row";
+  if (cls) r.classList.add(cls);
+  const l = document.createElement("div");
+  l.className = "label";
+  l.textContent = label;
+  if (sub) {
+    const s = document.createElement("small");
+    s.textContent = sub;
+    l.appendChild(s);
+  }
+  r.appendChild(l);
+  r.appendChild(valueEl);
+  return r;
+};
+
 function render(data) {
   const b = data.breakdown;
-
   const carLabel = [data.car.make, data.car.model].filter(Boolean).join(" ") || "This car";
   const originLabel = data.car.origin === "NI" ? "Northern Ireland" : "Great Britain";
-  const buyerLabel = data.car.buyerType === "vat-dealer" ? "VAT-registered dealer" : "Private buyer";
-  document.getElementById("result-summary").textContent =
-    `${carLabel} (${data.car.year || "year unknown"}, ${originLabel}) imported as a ${buyerLabel}. ` +
-    `FX: €1 ≈ £${(1 / b.fxRate).toFixed(3)}`;
+  const buyerLabel = data.car.buyerType === "vat-dealer" ? "VAT-registered dealer" : "private buyer";
+  const fxEurPerGbp = b.fxRate;
+  const fxGbpPerEur = (1 / fxEurPerGbp).toFixed(3);
 
-  fill("r-price-gbp", `${gbp(b.carPriceGBP)} → ${euro(b.carPriceEUR)}`);
-  fill("r-price-eur", euro(b.carPriceEUR));
-  fill("r-shipping", euro(b.shippingEUR));
-  fill("r-duty-rate", `(${(b.dutyRate * 100).toFixed(0)}%)`);
-  fill("r-duty", euro(b.duty));
-  fill("r-vat-note", b.vatApplies ? "(applies)" : b.vatReclaimable ? "(applies)" : "(no VAT)");
-  fill("r-vat", euro(b.vat));
-  fill("r-vrt-rate", `(${(b.vrtRate * 100).toFixed(0)}%)`);
-  fill("r-vrt", euro(b.vrt));
-  fill("r-nox", euro(b.noxLevy));
-  fill("r-reg", euro(b.registrationFee));
-  fill("r-nct", euro(b.nctFee));
-  fill("r-total", euro(data.total));
+  /* Summary lines (pass-16) */
+  const summary = document.getElementById("result-summary");
+  summary.innerHTML = "";
+  const mk = (txt) => {
+    const d = document.createElement("div");
+    d.textContent = txt;
+    summary.appendChild(d);
+  };
+  mk(`${carLabel} · ${data.car.year || "year unknown"} · ${originLabel}`);
+  mk(`Buying as a ${buyerLabel}${data.car.buyerType === "vat-dealer" ? " (VAT reclaimable)" : ""}`);
+  mk(`Exchange rate: £1 = €${fxEurPerGbp.toFixed(3)} · UK price ${gbp(b.carPriceGBP)}`);
 
-  const grandRow = document.getElementById("r-grand-row");
-  if (b.vatReclaimable) {
-    grandRow.classList.remove("hidden");
-    fill("r-grand", euro(data.grandTotalInclVat));
+  /* Badges (pass-06) */
+  const badges = document.getElementById("result-badges");
+  badges.innerHTML = "";
+  const badge = (text, cls) => {
+    const s = document.createElement("span");
+    s.className = "badge " + cls;
+    s.textContent = text;
+    badges.appendChild(s);
+  };
+  badge(data.car.origin === "NI" ? "Northern Ireland · no duty/VAT" : "Great Britain · duty + VAT", data.car.origin === "NI" ? "ni" : "gb");
+  if (data.car.buyerType === "vat-dealer") badge("VAT reclaimable", "dealer");
+  if (b.evRelief > 0) badge(`EV relief −${fmt0(b.evRelief)}`, "neutral");
+
+  /* Big total (pass-06) */
+  const big = document.getElementById("big-total");
+  big.innerHTML = "";
+  const label = document.createElement("span");
+  label.className = "big-label";
+  label.textContent =
+    data.car.buyerType === "vat-dealer" ? "Net cash required (VAT reclaimable)" : "Estimated total cost";
+  big.appendChild(label);
+  big.appendChild(document.createTextNode(fmt(data.total)));
+  const note = document.createElement("span");
+  note.className = "big-note";
+  if (data.car.buyerType === "vat-dealer") {
+    note.textContent = `Plus reclaimable VAT ${fmt(b.vat)} → grand total ${fmt(data.grandTotalInclVat)} if you can't fund it up front`;
+  } else if (data.car.origin === "GB") {
+    note.textContent = "Includes customs duty, import VAT, VRT, NOx levy, fees & shipping";
   } else {
-    grandRow.classList.add("hidden");
+    note.textContent = "Includes VRT, NOx levy, fees & shipping (no duty or import VAT)";
+  }
+  big.appendChild(note);
+
+  /* Breakdown rows */
+  const bd = document.getElementById("breakdown");
+  bd.innerHTML = "";
+
+  const dutyRow = row(
+    "Customs duty",
+    `(rate ${(b.dutyRate * 100).toFixed(0)}%${data.car.origin === "GB" ? "" : " — NI exemption"})`,
+    b.duty > 0 ? cell(fmt(b.duty)) : na("Not applicable"),
+    "duty"
+  );
+  bd.appendChild(dutyRow);
+
+  const vatRow = row(
+    "Import VAT",
+    b.vatApplies
+      ? `(23%${data.car.buyerType === "vat-dealer" ? " — reclaimable" : ""})`
+      : "(GB cars only)",
+    b.vat > 0 ? cell(fmt(b.vat)) : na("Not applicable"),
+    "vat"
+  );
+  bd.appendChild(vatRow);
+
+  /* Dealer net rows (pass-05) */
+  if (data.car.buyerType === "vat-dealer" && b.vat > 0) {
+    const net = row(
+      "Net total (VAT reclaimable)",
+      "Your cash cost after reclaiming import VAT",
+      cell(fmt(data.total), "net"),
+      "sub"
+    );
+    bd.appendChild(net);
+    const grand = row(
+      "Grand total (incl. reclaimable VAT)",
+      "Cash needed up front if you fund it before reclaim",
+      cell(fmt(data.grandTotalInclVat)),
+      "total"
+    );
+    bd.appendChild(grand);
   }
 
-  document.getElementById("n-omsp").textContent =
-    `VRT is charged on Revenue's OMSP (Open Market Selling Price). We estimate it as UK price + shipping + duty (${euro(b.omsp)}). ` +
-    `Revenue's official OMSP may differ.`;
+  const vrtRow = row(
+    "VRT (Vehicle Registration Tax)",
+    `OMSP ${fmt(b.omsp)} · CO₂ band ${b.vrtBand} (${(b.vrtRate * 100).toFixed(2)}%)${b.evRelief > 0 ? ` · EV relief −${fmt0(b.evRelief)}` : ""}`,
+    cell(fmt(b.vrt)),
+    "vrt"
+  );
+  bd.appendChild(vrtRow);
 
-  document.getElementById("n-motor-tax").textContent =
-    `Ongoing annual motor tax (not included above): approx. ${euro(b.annualMotorTax)} (CO2 band ${b.motorTaxBand}).`;
+  const noxRow = row(
+    "NOx levy",
+    `${b.noxMg} mg/km`,
+    b.noxLevy > 0 ? cell(fmt(b.noxLevy)) : na("None"),
+    "nox"
+  );
+  bd.appendChild(noxRow);
 
-  document.getElementById("n-disclaimer").textContent =
-    `Estimate only. Final VRT/duty are set by Revenue at registration. Electric cars may qualify for VRT relief — check with Revenue.`;
+  const shipRow = row("Shipping & transport", "Ferry, trailer, insurance", cell(fmt(b.shippingEUR)), "ship");
+  bd.appendChild(shipRow);
+
+  const feeRow = row("Registration & NCT", `Registration €125 · NCT ${fmt(b.nctFee)}`, cell(fmt(b.registrationFee + b.nctFee)), "fee");
+  bd.appendChild(feeRow);
+
+  /* Annual motor tax — NOT in total (pass-07) */
+  if (b.annualMotorTax) {
+    const annual = row(
+      "Annual motor tax (not included in total)",
+      `Ongoing yearly cost · CO₂ band ${b.motorTaxBand}`,
+      cell(fmt(b.annualMotorTax)),
+      "annual"
+    );
+    bd.appendChild(annual);
+  }
+
+  /* Notes */
+  const notes = document.getElementById("result-notes");
+  notes.innerHTML = "";
+  const noteP = (txt) => {
+    const p = document.createElement("p");
+    p.textContent = txt;
+    notes.appendChild(p);
+  };
+  noteP(`VRT is charged on Revenue's OMSP. We estimate it as UK price + shipping + duty (${fmt(b.omsp)}) — Revenue's official figure can differ.`);
+  noteP(`Annual motor tax is ${fmt(b.annualMotorTax)}/yr and is not part of the import total above.`);
+  noteP("Estimate only — final duty, VAT and VRT are set by Revenue at registration.");
+
+  /* Copy button (pass-17) */
+  copyBtn.classList.remove("hidden");
 
   results.classList.remove("hidden");
   results.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+/* ── Copy summary (pass-17) ──────────────────────────────────────── */
+async function copySummary() {
+  const text = document.getElementById("result-summary").textContent + "\n" +
+    document.getElementById("big-total").textContent.replace(/\s+/g, " ").trim();
+  try {
+    await navigator.clipboard.writeText(text);
+    const orig = copyBtn.textContent;
+    copyBtn.textContent = "✓ Copied";
+    setTimeout(() => (copyBtn.textContent = orig), 1600);
+  } catch {
+    showError("Couldn't copy — your browser blocked clipboard access.");
+  }
+}
+
+copyBtn.addEventListener("click", copySummary);
 form.addEventListener("submit", submit);
+form.addEventListener("change", persist);
+form.addEventListener("input", persist);
+
+refreshHints();
+restore();
+loadFx();

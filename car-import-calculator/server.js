@@ -22,6 +22,8 @@ app.post("/api/estimate", async (req, res) => {
 
   const origin = b.origin === "NI" ? "NI" : "GB";
   const buyerType = b.buyerType === "vat-dealer" ? "vat-dealer" : "private";
+  const fuelType = ["petrol", "diesel", "electric", "hybrid"].includes(b.fuelType) ? b.fuelType : "petrol";
+  const co2Standard = b.co2Standard === "nedc" ? "nedc" : "wltp";
 
   const ukPriceGBP = Number(b.ukPriceGBP);
   if (!ukPriceGBP || ukPriceGBP <= 0) {
@@ -38,6 +40,8 @@ app.post("/api/estimate", async (req, res) => {
     const result = calculate({
       origin,
       buyerType,
+      fuelType,
+      co2Standard,
       ukPriceGBP,
       co2,
       nox: Number(b.nox) || 0,

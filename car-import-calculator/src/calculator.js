@@ -25,6 +25,11 @@ function vrtRateFor(co2) {
   return band ? band.rate : config.vrtRates[config.vrtRates.length - 1].rate;
 }
 
+/** Full VRT band object (rate + minimum) for a given CO2 figure. */
+function vrtBandFor(co2) {
+  return config.vrtRates.find((b) => co2 <= b.maxCO2) || config.vrtRates[config.vrtRates.length - 1];
+}
+
 /** Annual motor tax band (informational). */
 function motorTaxBandFor(co2) {
   const band = config.motorTaxRates.find((b) => co2 <= b.maxCO2);
@@ -47,11 +52,39 @@ function noxCharge(nox) {
   return charge;
 }
 
-/** Whether Irish import VAT applies. GB cars registered on/after 1 Jan 2021. */
-function importVatApplies(origin, firstRegYear) {
-  if (origin === "NI") return false;
-  if (!firstRegYear) return true; // assume post-cutoff if unknown
-  return Number(firstRegYear) >= config.vatCutoffYear;
+/**
+ * Whether Irish import VAT applies.
+ * GB cars ALWAYS pay 23% import VAT, regardless of registration year
+ * (verified: completecar.ie per Revenue advice). NI cars never pay,
+ * provided NI-registered status can be proven.
+ */
+function importVatApplies(origin) {
+  return origin === "GB";
+}
+
+/**
+ * Apply the NEDC→WLTP uplift to a CO2 figure if the user supplied NEDC data.
+ * @param {number} co2 raw CO2 figure
+ * @param {string} [co2Standard] "nedc" | "wltp"
+ * @param {string} [fuelType]    "diesel" | "petrol" | ...
+ */
+function wltpCo2(co2, co2Standard, fuelType) {
+  const c = Number(co2) || 0;
+  if (co2Standard !== "nedc") return c;
+  const f = fuelType === "diesel" ? config.nedcToWltp.diesel : config.nedcToWltp.other;
+  return Math.round(c * f.slope + f.intercept);
+}
+
+/**
+ * EV VRT relief (VERIFIED): €5,000 for registrations before 31 Dec 2026,
+ * full below €40,000 OMSP, tapered to €0 at €50,000 OMSP.
+ */
+function evReliefFor(omsp, firstRegYear) {
+  if (Number(firstRegYear) > config.evRelief.untilYear) return 0;
+  if (omsp >= config.evRelief.zeroAtOmsp) return 0;
+  if (omsp <= config.evRelief.fullUpToOmsp) return config.evRelief.maxAmount;
+  // taper: €5,000 at €40k down to €0 at €50k
+  return round2((config.evRelief.zeroAtOmsp - omsp) * 0.5);
 }
 
 /**
@@ -67,6 +100,8 @@ function importVatApplies(origin, firstRegYear) {
  * @param {number}  [input.shippingEUR]   shipping cost € (default from config)
  * @param {number}  [input.fxRate]        EUR per GBP (default from config)
  * @param {number}  [input.omspOverride]  optional manual OMSP € (else estimated)
+ * @param {string}  [input.fuelType]      "petrol" | "diesel" | "electric" | "hybrid"
+ * @param {string}  [input.co2Standard]   "wltp" (default) | "nedc"
  * @returns {{ breakdown: object, total: number }}
  */
 function calculate(input) {
@@ -80,6 +115,8 @@ function calculate(input) {
     shippingEUR,
     fxRate,
     omspOverride,
+    fuelType = "petrol",
+    co2Standard = "wltp",
   } = input;
 
   const fx = Number(fxRate) || config.fallbackFx.EUR_PER_GBP;
@@ -90,18 +127,21 @@ function calculate(input) {
   const dutyRate = config.customsDutyRate[origin];
   const duty = round2((priceEUR + shipping) * dutyRate);
 
-  // ── Import VAT ──
+  // ── Import VAT (GB always pays; NI never) ──
   const vatRate = config.vatRate;
-  const vatApplies = importVatApplies(origin, firstRegYear);
+  const vatApplies = importVatApplies(origin);
   const vat = vatApplies ? round2((priceEUR + shipping + duty) * vatRate) : 0;
 
   // ── VRT ──
   // OMSP (Open Market Selling Price) is what Revenue tax VRT on. In practice
   // importers estimate OMSP ≈ UK price + shipping + customs duty (in EUR).
   const omsp = omspOverride ? round2(Number(omspOverride)) : round2(priceEUR + shipping + duty);
-  const vrtRate = vrtRateFor(co2);
+  const effCo2 = wltpCo2(co2, co2Standard, fuelType);
+  const band = vrtBandFor(effCo2);
   const noxLevy = noxCharge(nox);
-  const vrt = round2(omsp * vrtRate + noxLevy);
+  const rawVrt = omsp <= band.minThreshold ? Math.max(omsp * band.rate, band.minVrt) : omsp * band.rate;
+  const evRelief = fuelType === "electric" ? evReliefFor(omsp, firstRegYear) : 0;
+  const vrt = round2(Math.max(0, rawVrt + noxLevy - evRelief));
 
   // ── Fixed fees ──
   const registrationFee = config.fees.registration;
@@ -117,7 +157,7 @@ function calculate(input) {
   const grandTotalInclVat =
     isDealer && vat > 0 ? round2(total + vat) : total;
 
-  const motorTax = motorTaxBandFor(co2);
+  const motorTax = motorTaxBandFor(effCo2);
 
   return {
     breakdown: {
@@ -132,8 +172,13 @@ function calculate(input) {
       vat,
       vatReclaimable: isDealer && vat > 0,
       omsp,
-      vrtRate,
+      co2: effCo2,
+      co2Standard,
+      vrtRate: band.rate,
+      vrtBand: band.name,
+      noxMg: Number(nox) || 0,
       noxLevy,
+      evRelief,
       vrt,
       registrationFee,
       nctFee,
@@ -146,4 +191,4 @@ function calculate(input) {
   };
 }
 
-module.exports = { calculate, vrtRateFor, noxCharge, importVatApplies, motorTaxBandFor, round2 };
+module.exports = { calculate, vrtRateFor, noxCharge, importVatApplies, motorTaxBandFor, wltpCo2, evReliefFor, round2 };
