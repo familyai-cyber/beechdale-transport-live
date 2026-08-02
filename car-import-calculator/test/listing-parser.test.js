@@ -101,6 +101,39 @@ const DONEDEAL_HTML = `
 </html>
 `;
 
+// usedcarsni.com style — JSON-LD Car with price + nested priceSpecification currency
+const USEDCARSNI_HTML = `
+<html>
+<head>
+  <title>Used 2022 Porsche Taycan 350kW 4 93kWh 5dr Auto For Sale | Used Cars NI</title>
+  <meta property="og:title" content="Used 2022 Porsche Taycan 350kW 4 93kWh 5dr Auto For Sale | Used Cars NI">
+  <meta property="og:description" content="&pound;49,440 &middot; 14500 Miles &middot; County Down">
+</head>
+<body>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org/",
+    "@type": "Car",
+    "name": "2022 Porsche Taycan 350kW 4 93kWh 5dr Auto",
+    "brand": { "@type": "Brand", "name": "Porsche" },
+    "offers": {
+      "@type": "Offer",
+      "price": "49440",
+      "priceSpecification": {
+        "@type": "PriceSpecification",
+        "priceCurrency": "GBP",
+        "valueAddedTaxIncluded": "true"
+      },
+      "availability": "InStock",
+      "seller": { "@type": "Organization", "name": "Bells Crossgar" }
+    }
+  }
+  </script>
+  <p>Battery electric car for sale at &pound;49,440 from County Down, Northern Ireland.</p>
+</body>
+</html>
+`;
+
 // Bare HTML with minimal structure
 const BARE_HTML = `
 <html><head><title>Vauxhall Corsa 1.4 2015</title></head>
@@ -275,6 +308,30 @@ check("Unknown gibberish: graceful low-confidence result", () => {
   assert.strictEqual(r.priceGBP, null);
   assert.strictEqual(r.year, null);
   assert.ok(r.confidence <= 0.3, "confidence should be low, got " + r.confidence);
+});
+
+check("usedcarsni: JSON-LD price with nested priceSpecification currency", () => {
+  const r = extractListing(
+    "https://www.usedcarsni.com/2022-Porsche-Taycan-350kW-4-93kWh-5dr-Auto-399157019?make=23&model=236993045&keywords=&fuel_type=0&trans_type=0&age_from=0&age_to=0&price_from=0&price_to=0&user_type=0&mileage_to=0&body_style=0&location%5B%5D=0&location%5B%5D=0&homepage_search_attr=1&tab_id=0&search_type=1",
+    USEDCARSNI_HTML,
+    { fxRate: FX }
+  );
+  assert.strictEqual(r.make, "Porsche");
+  assert.ok(r.model.includes("Taycan"), "model=" + r.model);
+  assert.strictEqual(r.year, 2022);
+  assert.strictEqual(r.priceGBP, 49440);
+  assert.strictEqual(r.currency, "GBP");
+  assert.ok(Math.abs(r.priceEUR - 49440 * FX) < 1, "priceEUR=" + r.priceEUR);
+  assert.strictEqual(r.origin, "NI");
+  assert.strictEqual(r.fuelType, "electric");
+  assert.ok(r.sources.includes("json-ld"), "sources=" + r.sources);
+});
+
+check("usedcarsni: JSON-LD price with no currency falls back to visible text", () => {
+  const html = USEDCARSNI_HTML.replace('"priceCurrency": "GBP"', '"priceCurrency": ""');
+  const r = extractListing("https://www.usedcarsni.com/2022-Porsche-Taycan-350kW-4-93kWh-5dr-Auto-399157019", html, { fxRate: FX });
+  assert.strictEqual(r.priceGBP, 49440);
+  assert.strictEqual(r.currency, "GBP");
 });
 
 // ── Summary ──────────────────────────────────────────────────────────────

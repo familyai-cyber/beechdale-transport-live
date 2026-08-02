@@ -500,7 +500,15 @@
         for (const o of list) {
           if (!o || typeof o !== 'object') continue;
           const price = jsonLdValue(o.price) ?? jsonLdValue(o.lowPrice) ?? jsonLdValue(o['@value']);
-          if (price != null) return { price, currency: jsonLdValue(o.priceCurrency) };
+          if (price == null) continue;
+          // Currency may sit on the offer itself, nested in a priceSpecification
+          // (usedcarsni.com), or on a lowPrice/highPrice spec.
+          const currency =
+            jsonLdValue(o.priceCurrency) ??
+            (o.priceSpecification && typeof o.priceSpecification === 'object'
+              ? jsonLdValue(o.priceSpecification.priceCurrency)
+              : null);
+          return { price, currency };
         }
         return null;
       }
@@ -793,11 +801,23 @@
 
         // --- Price from visible text ---
         if (found.price == null) {
-          const p = parsePrice(cleanTitle) || parsePrice(visible.slice(0, 20000));
+          const p = parsePrice(cleanTitle) || parsePrice(decodeEntities(visible.slice(0, 20000)));
           if (p) {
             found.price = p.amount;
             found.currency = p.currency;
             sources.push('text-price');
+          }
+        }
+
+        // --- Currency inference fallback ---
+        // Some sites publish the price without an explicit currency (e.g. JSON-LD
+        // "price" with no currency). Infer £ vs € from the visible text. The text is
+        // entity-decoded because sites like usedcarsni emit &pound; / &euro;.
+        if (found.price != null && !found.currency) {
+          const cp = parsePrice(cleanTitle) || parsePrice(decodeEntities(visible.slice(0, 20000)));
+          if (cp && cp.currency) {
+            found.currency = cp.currency;
+            if (!sources.includes('text-price')) sources.push('text-price');
           }
         }
 
