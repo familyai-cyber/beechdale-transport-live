@@ -393,15 +393,20 @@ const extractHint = document.getElementById("extract-hint");
 const extractedChip = document.getElementById("extracted-chip");
 
 const PROXIES = [
-  (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-  (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+  // Jina Reader renders the page server-side and returns it with permissive CORS.
+  // It's the only public proxy that reliably reads Autotrader (works on Pages).
+  (u) => ({
+    url: `https://r.jina.ai/${u}`,
+    headers: { "X-Return-Format": "html", "Accept": "text/html" },
+  }),
+  (u) => ({ url: `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}` }),
 ];
 
-async function fetchWithTimeout(url, ms = 12000) {
+async function fetchWithTimeout(url, ms = 15000, headers) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms);
   try {
-    const res = await fetch(url, { signal: ctrl.signal });
+    const res = await fetch(url, { signal: ctrl.signal, headers });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.text();
   } finally {
@@ -524,12 +529,16 @@ async function extractFromUrl() {
     } catch { /* fall through */ }
 
     // 2) Static hosting (Pages): fetch HTML via CORS proxies, parse client-side.
+    //    Only accept results that actually read a price — a Cloudflare "Just a
+    //    moment…" shell falls back to URL parsing (no price) and must not be
+    //    treated as a full extraction, or the URL-only path below never runs.
     if (!extracted) {
       for (const proxy of PROXIES) {
         try {
-          const html = await fetchWithTimeout(proxy(url));
-          extracted = window.CarListingParser.extractListing(url, html, { fxRate });
-          if (extracted && extracted.confidence > 0) break;
+          const p = proxy(url);
+          const html = await fetchWithTimeout(p.url, 15000, p.headers);
+          const r = window.CarListingParser && window.CarListingParser.extractListing(url, html, { fxRate });
+          if (r && r.confidence > 0 && (r.priceGBP || r.priceEUR)) { extracted = r; break; }
         } catch { /* try next proxy */ }
       }
     }
@@ -538,37 +547,71 @@ async function extractFromUrl() {
     if (!extracted && window.CarListingParser) {
       try {
         const html = await fetchWithTimeout(url);
-        extracted = window.CarListingParser.extractListing(url, html, { fxRate });
+        const r = window.CarListingParser.extractListing(url, html, { fxRate });
+        if (r && r.confidence > 0 && (r.priceGBP || r.priceEUR)) extracted = r;
       } catch { /* ignore */ }
     }
 
-    if (!extracted || !window.CarListingParser) {
+    // 4) URL-only fallback: sites like usedcarsni are Cloudflare-blocked for all
+    //    proxies, but their link slugs carry make/model/year/fuel/origin. Read
+    //    what we can from the URL so the user only types the price.
+    let urlOnly = null;
+    if (!extracted && window.CarListingParser) {
+      urlOnly = window.CarListingParser.extractListing(url, "", { fxRate });
+      if (!urlOnly || urlOnly.confidence <= 0) urlOnly = null;
+    }
+
+    if (!extracted && !urlOnly) {
       setChip("error", "We couldn't read that listing. It may be blocked by the site — please fill the form manually.");
-      extractHintMsg("Try a direct listing page (not a search results page).");
+      extractHintMsg("Try a single advert page (not a search results page).");
       return;
     }
 
     // Normalise price to GBP (DoneDeal and other IE/NI sites quote in EUR).
-    if (!extracted.priceGBP && extracted.priceEUR) {
+    if (extracted && !extracted.priceGBP && extracted.priceEUR) {
       extracted.priceGBP = Math.round(extracted.priceEUR / (fxRate || 1.163));
     }
 
-    if (!extracted.priceGBP || !extracted.year) {
+    // Full extraction must have a price and year to be useful.
+    if (extracted && (!extracted.priceGBP || !extracted.year)) {
       const fields = [];
       if (!extracted.priceGBP) fields.push("price");
       if (!extracted.year) fields.push("year");
       setChip("error", `We couldn't read the ${fields.join(" and ")} from that page. It may be blocked by the site — please fill the form manually.`);
-      extractHintMsg("Try a direct listing page (not a search results page).");
+      extractHintMsg("Try a single advert page (not a search results page).");
       return;
     }
 
-    const notes = fillFromListing(extracted) || [];
-    const parts = [extracted.make, extracted.model, extracted.year, `£${Math.round(extracted.priceGBP)}`]
+    // URL-only results are partial: fill what we have, then ask for the price.
+    const result = extracted || urlOnly;
+    const isUrlOnly = !!urlOnly;
+    const notes = fillFromListing(result) || [];
+
+    if (isUrlOnly) {
+      const parts = [result.make, result.model, result.year].filter(Boolean).join(" · ");
+      const ask = [];
+      if (!result.priceGBP) ask.push("the asking price");
+      if (result.co2 == null && result.fuelType !== "electric") ask.push("CO₂");
+      const hint = ask.length
+        ? `We read this from the link — please add ${ask.join(" and ")} from the advert.`
+        : "We read this from the link — please double-check the details above.";
+      setChip("partial", `Read from link: ${parts}. Please add ${ask.length ? ask.join(" and ") : "the price"} and press Calculate.`);
+      extractHintMsg(hint);
+      const focusId = ask.includes("CO₂") ? "co2" : "price";
+      const el = document.getElementById(focusId);
+      if (el) {
+        el.focus();
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      return;
+    }
+
+    const parts = [result.make, result.model, result.year, `£${Math.round(result.priceGBP)}`]
       .filter(Boolean).join(" · ");
     const missing = [];
     // EVs emit 0 g/km — co2=0 (or null with fuelType electric) means no figure needed.
-    if (extracted.co2 == null && extracted.fuelType !== "electric") missing.push("CO₂");
-    if (!extracted.origin) missing.push("origin");
+    if (result.co2 == null && result.fuelType !== "electric") missing.push("CO₂");
+    if (!result.origin) missing.push("origin");
 
     if (missing.length) {
       setChip("partial", `Extracted: ${parts}. Please add: ${missing.join(", ")}.`);
@@ -590,7 +633,7 @@ async function extractFromUrl() {
     }
 
     setChip("ok", `Extracted: ${parts}.`);
-    const lowConfidence = (extracted.sources && extracted.sources.includes("url")) || (extracted.confidence != null && extracted.confidence < 0.5);
+    const lowConfidence = (result.sources && result.sources.includes("url")) || (result.confidence != null && result.confidence < 0.5);
     const noteText = notes.length ? " " + notes.join(" · ") : "";
     if (lowConfidence) {
       extractHintMsg("Most of this was read from the listing link — please double-check the details above." + noteText);

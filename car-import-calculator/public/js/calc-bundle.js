@@ -631,6 +631,14 @@
         if (/\b(pure electric|battery electric|fully electric|100% electric)\b|electric vehicle|\bev\b|zero emissions/.test(t)) return 'electric';
         if (/plug[- ]?in hybrid|\bphev\b/.test(t)) return 'hybrid';
         if (/hybrid|\bhev\b|self[- ]charging/.test(t)) return 'hybrid';
+        // EV spec convention: a motor power in kW AND a battery capacity in kWh
+        // (e.g. "350kW 4.93kWh", "150kW 58kWh") almost always means a battery-electric
+        // car. This catches URL slugs from Cloudflare-blocked sites where we only have
+        // the link text. Hybrids are matched above so PHEVs don't land here.
+        if (/\b\d+(?:\.\d+)?\s*kw\b/.test(t) && /\b\d+(?:\.\d+)?\s*kwh\b/.test(t)) return 'electric';
+        // A battery capacity alone (e.g. "40kWh", "64kWh") in the URL slug also points
+        // to a battery-electric car — petrol/diesel/hybrid slugs rarely quote kWh.
+        if (/\b\d+(?:\.\d+)?\s*kwh\b/.test(t)) return 'electric';
         if (/diesel|\btdi\b|\bd4d\b|oil[- ]burn/.test(t)) return 'diesel';
         if (/petrol|gasoline|\btsi\b|\btsfi\b|\bgdi\b|\bfsi\b/.test(t)) return 'petrol';
         return null;
@@ -840,7 +848,7 @@
         }
 
         // --- CO2 & fuel ---
-        if (found.fuelType == null) found.fuelType = detectFuelType(visible + ' ' + cleanTitle);
+        if (found.fuelType == null) found.fuelType = detectFuelType(visible + ' ' + cleanTitle + ' ' + slug);
         if (found.fuelType) sources.push('fuel');
         if (found.co2 == null) found.co2 = extractCo2(visible) || extractCo2(cleanTitle);
         // EVs emit 0 g/km by definition — the advert may only say "Electric / Zero

@@ -366,6 +366,41 @@ check("usedcarsni EV: co2 = 0 when no figure published", () => {
   assert.ok(r.sources.includes("co2"), "sources=" + r.sources);
 });
 
+check("usedcarsni EV URL-only (no HTML): kW+kWh slug → electric, co2=0", () => {
+  const r = extractListing(
+    "https://www.usedcarsni.com/2022-Porsche-Taycan-350kW-4-93kWh-5dr-Auto-399157019",
+    "",
+    { fxRate: FX }
+  );
+  assert.strictEqual(r.fuelType, "electric");
+  assert.strictEqual(r.co2, 0);
+  assert.strictEqual(r.make, "Porsche");
+  assert.strictEqual(r.year, 2022);
+  assert.strictEqual(r.origin, "NI");
+  assert.ok(r.sources.includes("co2"), "sources=" + r.sources);
+});
+
+check("usedcarsni Leaf URL-only (no HTML): kWh-only slug → electric, co2=0", () => {
+  const r = extractListing(
+    "https://www.usedcarsni.com/2021-Nissan-Leaf-40kWh-Acenta-5dr-Auto-123456",
+    "",
+    { fxRate: FX }
+  );
+  assert.strictEqual(r.fuelType, "electric");
+  assert.strictEqual(r.co2, 0);
+  assert.strictEqual(r.make, "Nissan");
+});
+
+check("usedcarsni petrol URL-only: no false EV flag", () => {
+  const r = extractListing(
+    "https://www.usedcarsni.com/2019-Ford-Fiesta-1-0T-EcoBoost-Zetec-5dr-987654",
+    "",
+    { fxRate: FX }
+  );
+  assert.strictEqual(r.fuelType, null);
+  assert.strictEqual(r.co2, null);
+});
+
 // ── VAT-qualifying end-to-end ───────────────────────────────────────────
 const VAT_QUALIFIED_HTML = `
 <html>
