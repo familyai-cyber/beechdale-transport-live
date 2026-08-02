@@ -380,6 +380,194 @@ form.addEventListener("submit", submit);
 form.addEventListener("change", persist);
 form.addEventListener("input", persist);
 
+/* ── Listing URL extraction (paste-a-link) ───────────────────────── */
+const extractBtn = document.getElementById("extract-btn");
+const listingUrl = document.getElementById("listing-url");
+const extractHint = document.getElementById("extract-hint");
+const extractedChip = document.getElementById("extracted-chip");
+
+const PROXIES = [
+  (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+];
+
+async function fetchWithTimeout(url, ms = 12000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+function setChip(state, html) {
+  extractedChip.className = "extracted-chip " + state;
+  extractedChip.innerHTML = html || "";
+  extractedChip.classList.toggle("hidden", !html);
+}
+
+function extractHintMsg(msg) {
+  extractHint.textContent = msg;
+}
+
+function fillFromListing(r) {
+  const setVal = (id, v) => {
+    const el = document.getElementById(id);
+    if (el && v != null && v !== "") {
+      el.value = v;
+      el.classList.remove("flash");
+      void el.offsetWidth; // restart animation
+      el.classList.add("flash");
+    }
+  };
+
+  if (r.make) setVal("make", r.make);
+  if (r.model) setVal("model", r.model);
+  if (r.year) setVal("year", String(r.year));
+
+  // Price: prefer GBP; convert EUR → GBP using the live rate.
+  let priceGBP = r.priceGBP;
+  if (!priceGBP && r.priceEUR && fxRate) priceGBP = Math.round(r.priceEUR / fxRate);
+  if (!priceGBP && r.priceEUR) priceGBP = Math.round(r.priceEUR / 1.163);
+  if (priceGBP) setVal("uk-price", String(Math.round(priceGBP)));
+
+  if (r.co2) setVal("co2", String(Math.round(r.co2)));
+  if (r.fuelType) {
+    const el = document.getElementById("fuel-type");
+    if (el && ["petrol", "diesel", "hybrid", "electric"].includes(r.fuelType)) {
+      el.value = r.fuelType;
+    }
+  }
+  if (r.origin) {
+    const o = document.querySelector(`input[name="origin"][value="${r.origin === "NI" ? "NI" : "GB"}"]`);
+    if (o) o.checked = true;
+  }
+  refreshHints();
+  persist();
+}
+
+function autoCalculateIfReady() {
+  const has = (id) => {
+    const v = document.getElementById(id).value;
+    return v !== "" && Number(v) > 0;
+  };
+  if (has("year") && has("uk-price") && has("co2")) {
+    form.requestSubmit();
+    return true;
+  }
+  return false;
+}
+
+async function extractFromUrl() {
+  const url = listingUrl.value.trim();
+  clearError();
+  setChip("loading", "Extracting details from the listing…");
+  extractHintMsg("");
+
+  if (!/^https?:\/\/.+/i.test(url)) {
+    setChip("error", "Please paste a full link starting with http:// or https://.");
+    return;
+  }
+
+  extractBtn.disabled = true;
+  extractBtn.classList.add("loading");
+  extractBtn.querySelector(".btn-label").textContent = "Extracting…";
+
+  try {
+    let extracted = null;
+
+    // 1) Local dev: the Express server fetches server-side (no CORS limits).
+    try {
+      const res = await fetch("/api/parse-listing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, fxRate }),
+      });
+      if (res.ok) {
+        const j = await res.json();
+        if (j && (j.priceGBP || j.year || j.make)) extracted = j;
+      }
+    } catch { /* fall through */ }
+
+    // 2) Static hosting (Pages): fetch HTML via CORS proxies, parse client-side.
+    if (!extracted) {
+      for (const proxy of PROXIES) {
+        try {
+          const html = await fetchWithTimeout(proxy(url));
+          extracted = window.CarListingParser.extractListing(url, html, { fxRate });
+          if (extracted && extracted.confidence > 0) break;
+        } catch { /* try next proxy */ }
+      }
+    }
+
+    // 3) Last resort: direct fetch (rarely allowed cross-origin).
+    if (!extracted && window.CarListingParser) {
+      try {
+        const html = await fetchWithTimeout(url);
+        extracted = window.CarListingParser.extractListing(url, html, { fxRate });
+      } catch { /* ignore */ }
+    }
+
+    if (!extracted || !window.CarListingParser) {
+      setChip("error", "We couldn't read that listing. It may be blocked by the site — please fill the form manually.");
+      extractHintMsg("Try a direct listing page (not a search results page).");
+      return;
+    }
+
+    // Normalise price to GBP (DoneDeal and other IE/NI sites quote in EUR).
+    if (!extracted.priceGBP && extracted.priceEUR) {
+      extracted.priceGBP = Math.round(extracted.priceEUR / (fxRate || 1.163));
+    }
+
+    if (!extracted.priceGBP || !extracted.year) {
+      const fields = [];
+      if (!extracted.priceGBP) fields.push("price");
+      if (!extracted.year) fields.push("year");
+      setChip("error", `We couldn't read the ${fields.join(" and ")} from that page. It may be blocked by the site — please fill the form manually.`);
+      extractHintMsg("Try a direct listing page (not a search results page).");
+      return;
+    }
+
+    fillFromListing(extracted);
+    const parts = [extracted.make, extracted.model, extracted.year, `£${Math.round(extracted.priceGBP)}`]
+      .filter(Boolean).join(" · ");
+    const missing = [];
+    if (!extracted.co2) missing.push("CO₂");
+    if (!extracted.origin) missing.push("origin");
+    if (missing.length) {
+      setChip("partial", `Extracted: ${parts}. Please add: ${missing.join(", ")}.`);
+      extractHintMsg(missing.includes("CO₂")
+        ? "CO₂ is needed for VRT — it's on the UK V5C or the advert's spec. Add it and press Calculate."
+        : "Check the boxes above and press Calculate.");
+    } else {
+      setChip("ok", `Extracted: ${parts}.`);
+      extractHintMsg("");
+    }
+
+    if (!autoCalculateIfReady()) {
+      if (!missing.length) extractHintMsg("Check the details above, then press Calculate.");
+      results.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  } catch (err2) {
+    setChip("error", "Couldn't reach that listing. The site may be blocking automated requests — please enter the details manually.");
+  } finally {
+    extractBtn.disabled = false;
+    extractBtn.classList.remove("loading");
+    extractBtn.querySelector(".btn-label").textContent = "🔍 Extract details";
+  }
+}
+
+extractBtn.addEventListener("click", extractFromUrl);
+listingUrl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    extractFromUrl();
+  }
+});
+
 refreshHints();
 restore();
 loadFx();

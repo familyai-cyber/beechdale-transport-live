@@ -9,6 +9,7 @@ const express = require("express");
 const path = require("path");
 const { calculate } = require("./src/calculator");
 const { getEurPerGbp } = require("./src/exchange");
+const { extractListing } = require("./src/listing-parser");
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -71,6 +72,37 @@ app.post("/api/estimate", async (req, res) => {
 app.get("/api/fx", async (req, res) => {
   const rate = await getEurPerGbp();
   res.json({ eurPerGbp: rate });
+});
+
+// ── Listing extraction ──────────────────────────────────────────────
+// Client-side fallback: fetch the page here (no CORS) and extract details.
+app.post("/api/parse-listing", async (req, res) => {
+  const url = String((req.body || {}).url || "").trim();
+  if (!/^https?:\/\//i.test(url)) {
+    return res.status(400).json({ error: "Please paste a valid http(s) car listing URL." });
+  }
+
+  let response;
+  try {
+    response = await fetch(url, {
+      redirect: "follow",
+      signal: AbortSignal.timeout(8000),
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; CarImportCalculator/1.0)" },
+    });
+  } catch (err) {
+    return res.status(502).json({ error: `Could not fetch listing (${err.name || "network error"}). Try pasting the details manually.` });
+  }
+  if (!response.ok) {
+    return res.status(502).json({ error: `Listing site returned ${response.status} — it may block automated access.` });
+  }
+  const html = await response.text();
+  if (html.length > 2_000_000) {
+    return res.status(502).json({ error: "Listing page is too large to parse." });
+  }
+
+  const fxRate = await getEurPerGbp();
+  const extracted = extractListing(url, html, { fxRate });
+  res.json({ url, fxRate, ...extracted });
 });
 
 // ── Serve SPA ───────────────────────────────────────────────────────
