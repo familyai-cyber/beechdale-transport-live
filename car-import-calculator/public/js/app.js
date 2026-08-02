@@ -403,10 +403,10 @@ async function fetchWithTimeout(url, ms = 12000) {
   }
 }
 
-function setChip(state, html) {
+function setChip(state, text) {
   extractedChip.className = "extracted-chip " + state;
-  extractedChip.innerHTML = html || "";
-  extractedChip.classList.toggle("hidden", !html);
+  extractedChip.textContent = text || "";
+  extractedChip.classList.toggle("hidden", !text);
 }
 
 function extractHintMsg(msg) {
@@ -464,7 +464,7 @@ function autoCalculateIfReady() {
 async function extractFromUrl() {
   const url = listingUrl.value.trim();
   clearError();
-  setChip("loading", "Extracting details from the listing…");
+  setChip("loading", "Extracting details from the listing… this can take a few seconds.");
   extractHintMsg("");
 
   if (!/^https?:\/\/.+/i.test(url)) {
@@ -537,19 +537,35 @@ async function extractFromUrl() {
     const missing = [];
     if (!extracted.co2) missing.push("CO₂");
     if (!extracted.origin) missing.push("origin");
+
     if (missing.length) {
       setChip("partial", `Extracted: ${parts}. Please add: ${missing.join(", ")}.`);
-      extractHintMsg(missing.includes("CO₂")
-        ? "CO₂ is needed for VRT — it's on the UK V5C or the advert's spec. Add it and press Calculate."
-        : "Check the boxes above and press Calculate.");
-    } else {
-      setChip("ok", `Extracted: ${parts}.`);
-      extractHintMsg("");
+      if (missing.includes("CO₂")) {
+        extractHintMsg("CO₂ is needed for VRT — it's on the UK V5C or the advert's spec. Add it and press Calculate.");
+      } else {
+        extractHintMsg("Where the car is registered changes duty & VAT by thousands — please select Great Britain or Northern Ireland.");
+      }
+      // Take the user to the first thing they must fix, not the (empty) results.
+      const focusId = missing[0] === "CO₂" ? "co2" : null;
+      if (focusId) {
+        const el = document.getElementById(focusId);
+        if (el) {
+          el.focus();
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }
+      return;
     }
 
+    setChip("ok", `Extracted: ${parts}.`);
+    const lowConfidence = (extracted.sources && extracted.sources.includes("url")) || (extracted.confidence != null && extracted.confidence < 0.5);
+    if (lowConfidence) {
+      extractHintMsg("Most of this was read from the listing link — please double-check the details above.");
+    } else {
+      extractHintMsg("");
+    }
     if (!autoCalculateIfReady()) {
-      if (!missing.length) extractHintMsg("Check the details above, then press Calculate.");
-      results.scrollIntoView({ behavior: "smooth", block: "start" });
+      extractHintMsg(lowConfidence ? "Details above were read from the link — double-check them, then press Calculate." : "Check the details above, then press Calculate.");
     }
   } catch (err2) {
     setChip("error", "Couldn't reach that listing. The site may be blocking automated requests — please enter the details manually.");
@@ -565,6 +581,14 @@ listingUrl.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
     extractFromUrl();
+  }
+});
+// If the user changes the pasted link, clear the stale extraction result.
+listingUrl.addEventListener("input", () => {
+  const cls = extractedChip.className;
+  if (cls.includes("ok") || cls.includes("partial")) {
+    setChip("", "");
+    extractHintMsg("");
   }
 });
 
