@@ -18,23 +18,34 @@ let fxRate = null; // current live rate
 /* ── FX badge (pass-03) ──────────────────────────────────────────── */
 async function loadFx() {
   fxBadge.classList.add("loading");
+  const setRate = (rate) => {
+    fxRate = rate;
+    fxBadge.textContent = `£1 = €${fxRate.toFixed(3)}`;
+    fxBadge.classList.remove("loading");
+    fxBadge.classList.add("live");
+    fxBadge.title = "Live exchange rate (auto-updated). Also shown as £ in the results.";
+  };
+  const fail = () => {
+    fxBadge.textContent = "FX unavailable – using default";
+    fxBadge.classList.remove("loading");
+  };
+
+  // 1) Try the app server's /api/fx when hosted on Express.
   try {
     const res = await fetch("/api/fx");
     const data = await res.json();
-    if (res.ok && data.eurPerGbp) {
-      fxRate = data.eurPerGbp;
-      fxBadge.textContent = `£1 = €${fxRate.toFixed(3)}`;
-      fxBadge.classList.remove("loading");
-      fxBadge.classList.add("live");
-      fxBadge.title = "Live exchange rate (auto-updated). Also shown as £ in the results.";
-    } else {
-      fxBadge.textContent = "FX unavailable – using default";
-      fxBadge.classList.remove("loading");
-    }
-  } catch {
-    fxBadge.textContent = "FX unavailable – using default";
-    fxBadge.classList.remove("loading");
-  }
+    if (res.ok && data.eurPerGbp) return setRate(data.eurPerGbp);
+  } catch { /* fall through */ }
+
+  // 2) Static hosting (GitHub Pages): call the public FX API directly.
+  try {
+    const res = await fetch("https://open.er-api.com/v6/latest/GBP");
+    const json = await res.json();
+    const rate = Number(json?.rates?.EUR);
+    if (res.ok && rate > 0) return setRate(rate);
+  } catch { /* fall through */ }
+
+  fail();
 }
 
 /* ── Hints (pass-18: quantified origin impact) ───────────────────── */
@@ -135,14 +146,33 @@ async function submit(e) {
   submitBtn.querySelector(".btn-label").textContent = "Calculating…";
   results.classList.add("recalculating");
 
+  const payload = buildPayload();
+
   try {
-    const res = await fetch("/api/estimate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(buildPayload()),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Something went wrong");
+    let data;
+    // Prefer the local calculation engine (works on static hosting too).
+    if (window.CarCalc && typeof window.CarCalc.calculate === "function") {
+      data = window.CarCalc.calculate(payload);
+      // Match the shape the server returns so render() is shared.
+      data.car = {
+        make: payload.make || "",
+        model: payload.model || "",
+        year: payload.firstRegYear ? Number(payload.firstRegYear) : null,
+        origin: payload.origin,
+        buyerType: payload.buyerType,
+      };
+      data.fx = { rate: data.breakdown.fxRate, source: "live-or-default" };
+    } else {
+      // Fallback: the Express server API.
+      const res = await fetch("/api/estimate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "Something went wrong");
+      data = j;
+    }
     render(data);
     persist();
   } catch (err2) {
