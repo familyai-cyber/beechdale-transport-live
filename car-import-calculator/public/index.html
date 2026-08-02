@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Car Import Cost Calculator – UK/NI → Ireland</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header>
+    <h1>🚗 Car Import Cost Calculator</h1>
+    <p class="tagline">UK (GB) &amp; Northern Ireland → Republic of Ireland</p>
+  </header>
+
+  <main>
+    <form id="estimate-form" class="card">
+      <h2>Car details</h2>
+
+      <div class="grid">
+        <label>
+          Make
+          <input type="text" id="make" placeholder="e.g. Volkswagen" />
+        </label>
+        <label>
+          Model
+          <input type="text" id="model" placeholder="e.g. Golf" />
+        </label>
+      </div>
+
+      <div class="grid">
+        <label>
+          Year of first registration
+          <input type="number" id="year" placeholder="e.g. 2022" min="1990" max="2026" required />
+        </label>
+        <label>
+          UK purchase price (£)
+          <input type="number" id="uk-price" placeholder="e.g. 18500" min="0" step="100" required />
+        </label>
+      </div>
+
+      <div class="grid">
+        <label>
+          CO₂ emissions (g/km)
+          <input type="number" id="co2" placeholder="e.g. 118" min="0" step="1" required />
+          <small>Find this on the UK V5C (logbook) or in the car's spec.</small>
+        </label>
+        <label>
+          NOx emissions (mg/km) <span class="opt">optional</span>
+          <input type="number" id="nox" placeholder="e.g. 40" min="0" step="1" />
+          <small>Only used for the NOx levy. Leave blank to skip.</small>
+        </label>
+      </div>
+
+      <h2>Import setup</h2>
+
+      <fieldset class="segmented" id="origin-group">
+        <legend>Where is the car registered?</legend>
+        <label class="segment">
+          <input type="radio" name="origin" value="GB" checked />
+          <span>Great Britain (mainland UK)</span>
+        </label>
+        <label class="segment">
+          <input type="radio" name="origin" value="NI" />
+          <span>Northern Ireland</span>
+        </label>
+      </fieldset>
+      <p class="hint" id="origin-hint"></p>
+
+      <fieldset class="segmented" id="buyer-group">
+        <legend>Who is importing it?</legend>
+        <label class="segment">
+          <input type="radio" name="buyerType" value="private" checked />
+          <span>Private buyer</span>
+        </label>
+        <label class="segment">
+          <input type="radio" name="buyerType" value="vat-dealer" />
+          <span>VAT-registered dealer</span>
+        </label>
+      </fieldset>
+      <p class="hint" id="buyer-hint"></p>
+
+      <label>
+        Shipping / transport to Ireland (€)
+        <input type="number" id="shipping" value="1200" min="0" step="50" />
+        <small>Ferry, trailer, insurance, etc. Adjust to your quote.</small>
+      </label>
+
+      <button type="submit" id="submit-btn">Calculate import cost</button>
+    </form>
+
+    <section id="results" class="card hidden">
+      <h2>Estimated import cost</h2>
+      <p class="sub" id="result-summary"></p>
+
+      <div class="breakdown">
+        <div class="row"><span>Car price (UK)</span><span id="r-price-gbp"></span></div>
+        <div class="row"><span>Car price (converted)</span><span id="r-price-eur"></span></div>
+        <div class="row"><span>Shipping / transport</span><span id="r-shipping"></span></div>
+        <div class="row"><span>Customs duty <small id="r-duty-rate"></small></span><span id="r-duty"></span></div>
+        <div class="row"><span>Import VAT (23%) <small id="r-vat-note"></small></span><span id="r-vat"></span></div>
+        <div class="row"><span>VRT (Vehicle Registration Tax) <small id="r-vrt-rate"></small></span><span id="r-vrt"></span></div>
+        <div class="row"><span>NOx levy</span><span id="r-nox"></span></div>
+        <div class="row"><span>Vehicle registration fee</span><span id="r-reg"></span></div>
+        <div class="row"><span>NCT test</span><span id="r-nct"></span></div>
+        <div class="row total"><span>Total estimated cost</span><span id="r-total"></span></div>
+        <div class="row grand hidden" id="r-grand-row"><span>Total incl. reclaimable VAT</span><span id="r-grand"></span></div>
+      </div>
+
+      <div class="notes">
+        <p id="n-omsp"></p>
+        <p id="n-motor-tax"></p>
+        <p id="n-disclaimer"></p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Estimate only — final amounts are set by Revenue on registration. Exchange rate updates automatically.</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
