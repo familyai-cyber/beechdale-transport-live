@@ -1,0 +1,214 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Estimate the full cost of importing a used car from the UK (Great Britain or Northern Ireland) into the Republic of Ireland: customs duty, import VAT, VRT, NOx levy, registration, NCT and shipping — with live GBP to EUR rates." />
+  <meta property="og:title" content="Car Import Cost Calculator – UK/NI to Ireland" />
+  <meta property="og:description" content="Get a full estimate of duty, VAT, VRT, NOx, fees and shipping when importing a car into Ireland." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E" />
+  <title>Car Import Cost Calculator – UK/NI → Ireland</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <div>
+        <h1>🚗 Car Import Cost Calculator</h1>
+        <p class="tagline">Great Britain &amp; Northern Ireland → Republic of Ireland</p>
+      </div>
+      <div class="fx-badge" id="fx-badge" aria-live="polite" title="Live exchange rate, auto-updated">Loading FX…</div>
+    </div>
+  </header>
+
+  <main class="container">
+    <form id="estimate-form" class="card" novalidate>
+      <div class="form-error hidden" id="form-error" role="alert" aria-live="assertive"></div>
+
+      <section class="form-section" aria-labelledby="step1">
+        <div class="step-heading">
+          <span class="step-num" aria-hidden="true">1</span>
+          <h2 id="step1">Car details</h2>
+        </div>
+
+        <div class="listing-row" aria-labelledby="listing-label">
+          <div class="field listing-field">
+            <label class="field-label" for="listing-url" id="listing-label">Paste a listing link <em class="opt">optional</em></label>
+            <div class="url-clear-wrap">
+              <input type="url" id="listing-url" placeholder="e.g. autotrader.co.uk/cars/… or cars.ni/used/…" autocomplete="off" />
+              <button type="button" id="clear-url" class="clear-btn hidden" aria-label="Clear the link" title="Clear the link">×</button>
+            </div>
+            <small class="hint-text">Autotrader UK, cars.ni and most other car sites. Clicking the box selects the old link so you can paste straight over it.</small>
+          </div>
+          <button type="button" id="extract-btn" class="btn-secondary">
+            <span class="spinner" aria-hidden="true"></span>
+            <span class="btn-label">🔍 Extract details</span>
+          </button>
+        </div>
+        <p class="hint" id="extract-hint" aria-live="polite"></p>
+        <div class="extracted-chip hidden" id="extracted-chip" aria-live="polite"></div>
+
+        <div class="grid">
+          <label class="field" for="make">
+            <span>Make</span>
+            <select id="make">
+              <option value="" selected>Select make…</option>
+            </select>
+            <input type="text" id="make-other" class="other-input hidden" placeholder="Type the make" autocomplete="off" aria-label="Make (other)" />
+            <small class="hint-text" id="make-hint">Select the make — CO₂ &amp; NOx auto-fill for known models.</small>
+          </label>
+          <label class="field" for="model">
+            <span>Model</span>
+            <select id="model" disabled>
+              <option value="" selected>Select make first…</option>
+            </select>
+            <input type="text" id="model-other" class="other-input hidden" placeholder="Type the model" autocomplete="off" aria-label="Model (other)" />
+          </label>
+        </div>
+
+        <div class="grid">
+          <label class="field" for="year">
+            <span>Year of first registration</span>
+            <select id="year">
+              <option value="" selected>Select year…</option>
+            </select>
+          </label>
+          <label class="field" for="uk-price">
+            <span>UK purchase price</span>
+            <div class="input-adorn">
+              <span class="adorn" aria-hidden="true">£</span>
+              <input type="number" id="uk-price" placeholder="e.g. 18500" min="0" step="100" required />
+            </div>
+          </label>
+        </div>
+
+        <div class="grid">
+          <label class="field" for="co2">
+            <span>CO₂ emissions (g/km)</span>
+            <input type="number" id="co2" placeholder="e.g. 118" min="0" step="1" />
+            <small class="hint-text" id="co2-hint">Auto-filled for known models — verify with the V5C (logbook). Required for petrol/diesel.</small>
+            <small class="hint-text kb-note hidden" id="co2-kb-note">✓ Auto-detected from the car knowledge base — verify with the V5C (logbook) before you buy.</small>
+          </label>
+          <label class="field" for="nox">
+            <span>NOx emissions (mg/km) <em class="opt">optional</em></span>
+            <input type="number" id="nox" placeholder="e.g. 40" min="0" step="1" />
+            <small class="hint-text" id="nox-hint">Leave blank if unknown — Revenue's default may apply.</small>
+          </label>
+        </div>
+
+        <div class="grid">
+          <label class="field" for="fuel-type">
+            <span>Fuel type</span>
+            <select id="fuel-type">
+              <option value="" selected>Auto-detect</option>
+              <option value="petrol">Petrol</option>
+              <option value="diesel">Diesel</option>
+              <option value="hybrid">Hybrid / Plug-in hybrid</option>
+              <option value="electric">Electric (EV)</option>
+            </select>
+            <small class="hint-text" id="fuel-hint">EVs may qualify for €5,000 VRT relief.</small>
+          </label>
+          <label class="field" for="co2-standard">
+            <span>CO₂ standard</span>
+            <select id="co2-standard">
+              <option value="wltp">WLTP (modern cars)</option>
+              <option value="nedc">NEDC (older cars)</option>
+            </select>
+            <small class="hint-text" id="std-hint">WLTP is the default for cars registered since 2017.</small>
+          </label>
+        </div>
+      </section>
+
+      <section class="form-section" aria-labelledby="step2">
+        <div class="step-heading">
+          <span class="step-num" aria-hidden="true">2</span>
+          <h2 id="step2">Import setup</h2>
+        </div>
+
+        <fieldset class="segmented" id="origin-group">
+          <legend>Where is the car currently registered?</legend>
+          <label class="segment">
+            <input type="radio" name="origin" value="GB" checked />
+            <span>Great Britain <small>(mainland UK)</small></span>
+          </label>
+          <label class="segment">
+            <input type="radio" name="origin" value="NI" />
+            <span>Northern Ireland</span>
+          </label>
+        </fieldset>
+        <p class="hint" id="origin-hint" aria-live="polite"></p>
+
+        <fieldset class="segmented" id="buyer-group">
+          <legend>Who is importing the car?</legend>
+          <label class="segment">
+            <input type="radio" name="buyerType" value="private" checked />
+            <span>Private buyer</span>
+          </label>
+          <label class="segment">
+            <input type="radio" name="buyerType" value="vat-dealer" />
+            <span>VAT-registered dealer</span>
+          </label>
+        </fieldset>
+        <p class="hint" id="buyer-hint" aria-live="polite"></p>
+
+        <label class="field" for="shipping">
+          <span>Shipping / transport to Ireland</span>
+          <div class="input-adorn">
+            <span class="adorn" aria-hidden="true">€</span>
+            <input type="number" id="shipping" value="300" min="0" step="50" />
+          </div>
+          <small class="hint-text" id="shipping-hint">Ferry, trailer &amp; insurance. Ferry from €179 — adjust to your quote.</small>
+        </label>
+      </section>
+
+      <button type="submit" id="submit-btn" class="btn-primary">
+        <span class="btn-label">Calculate import cost</span>
+      </button>
+    </form>
+
+    <section id="results" class="card results-card hidden" aria-live="polite">
+      <div class="results-head">
+        <h2>Estimated import cost</h2>
+        <button type="button" id="copy-btn" class="btn-ghost hidden" title="Copy a text summary">📋 Copy summary</button>
+      </div>
+      <div id="result-summary" class="summary-lines"></div>
+
+      <div class="big-total" id="big-total" aria-label="Total estimated cost"></div>
+      <div class="badges" id="result-badges"></div>
+
+      <div class="breakdown" id="breakdown"></div>
+
+      <div class="notes" id="result-notes"></div>
+    </section>
+
+    <section class="card glossary" aria-labelledby="glossary-title">
+      <h2 id="glossary-title">How it works</h2>
+      <details>
+        <summary>What am I actually paying for?</summary>
+        <p><strong>Customs duty</strong> — 10% of the car's value for cars from Great Britain. Cars from Northern Ireland are exempt because NI stays inside the EU customs union.</p>
+        <p><strong>Import VAT</strong> — 23% charged on <em>all</em> cars imported from Great Britain, regardless of age. NI cars are exempt with the right proof. A VAT-registered dealer can reclaim it.</p>
+        <p><strong>VRT</strong> (Vehicle Registration Tax) — charged once, when you register the car in Ireland, based on the car's OMSP (open market value) and CO₂ emissions. EVs get up to €5,000 relief.</p>
+        <p><strong>NOx levy</strong> — a charge based on nitrogen-oxide emissions (diesel cars especially).</p>
+        <p><strong>NCT</strong> — the Irish equivalent of an MOT; a first test is normally needed.</p>
+        <p><strong>Registration fee</strong> — Revenue's charge to register the car.</p>
+      </details>
+      <details>
+        <summary>Why does Northern Ireland make such a difference?</summary>
+        <p>After Brexit, NI remains aligned with the EU for customs and VAT. A car already registered in NI moves to Ireland with <strong>no customs duty and no import VAT</strong>. The same car registered in Great Britain pays 10% duty and 23% VAT. That can easily save €5,000+ on a typical car.</p>
+      </details>
+      <details>
+        <summary>Is this a guaranteed price?</summary>
+        <p>No. This is a <strong>planning estimate</strong>. Revenue sets the final VRT using its own OMSP valuation, which can differ from the UK price. Always confirm with a customs agent or Revenue before committing.</p>
+      </details>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Estimate only — final amounts are set by Revenue at registration. Exchange rate updates automatically.</p>
+  </footer>
+
+  <script src="js/calc-bundle.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

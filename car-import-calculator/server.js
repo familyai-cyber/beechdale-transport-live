@@ -1,0 +1,120 @@
+/**
+ * Car Import Cost Calculator – Server
+ *
+ * POST /api/estimate  → full import cost estimate for a UK/NI car into Ireland
+ * GET  /api/fx        → current GBP→EUR rate
+ */
+
+const express = require("express");
+const path = require("path");
+const { calculate } = require("./src/calculator");
+const { getEurPerGbp } = require("./src/exchange");
+const { extractListing } = require("./src/listing-parser");
+
+const app = express();
+const PORT = process.env.PORT || 3002;
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
+
+// ── Estimate ────────────────────────────────────────────────────────
+app.post("/api/estimate", async (req, res) => {
+  const b = req.body || {};
+
+  const origin = b.origin === "NI" ? "NI" : "GB";
+  const buyerType = b.buyerType === "vat-dealer" ? "vat-dealer" : "private";
+  const fuelType = ["petrol", "diesel", "electric", "hybrid"].includes(b.fuelType) ? b.fuelType : "petrol";
+  const co2Standard = b.co2Standard === "nedc" ? "nedc" : "wltp";
+
+  const ukPriceGBP = Number(b.ukPriceGBP);
+  if (!ukPriceGBP || ukPriceGBP <= 0) {
+    return res.status(400).json({ error: "Please enter a valid UK price in £." });
+  }
+  const co2 = Number(b.co2);
+  if (Number.isNaN(co2) || co2 < 0) {
+    return res.status(400).json({ error: "Please enter a valid CO2 figure (g/km)." });
+  }
+
+  const fxRate = Number.isFinite(Number(b.fxRate)) ? Number(b.fxRate) : await getEurPerGbp();
+
+  try {
+    const result = calculate({
+      origin,
+      buyerType,
+      fuelType,
+      co2Standard,
+      ukPriceGBP,
+      co2,
+      nox: Number(b.nox) || 0,
+      firstRegYear: b.firstRegYear ? Number(b.firstRegYear) : undefined,
+      shippingEUR: b.shippingEUR ? Number(b.shippingEUR) : undefined,
+      fxRate,
+      omspOverride: b.omspOverride ? Number(b.omspOverride) : undefined,
+    });
+
+    res.json({
+      car: {
+        make: b.make || "",
+        model: b.model || "",
+        year: b.firstRegYear ? Number(b.firstRegYear) : null,
+        origin,
+        buyerType,
+      },
+      fx: { rate: result.breakdown.fxRate, source: "live-or-default" },
+      ...result,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── FX rate ─────────────────────────────────────────────────────────
+app.get("/api/fx", async (req, res) => {
+  const rate = await getEurPerGbp();
+  res.json({ eurPerGbp: rate });
+});
+
+// ── Listing extraction ──────────────────────────────────────────────
+// Client-side fallback: fetch the page here (no CORS) and extract details.
+app.post("/api/parse-listing", async (req, res) => {
+  const url = String((req.body || {}).url || "").trim();
+  if (!/^https?:\/\//i.test(url)) {
+    return res.status(400).json({ error: "Please paste a valid http(s) car listing URL." });
+  }
+
+  let response;
+  try {
+    response = await fetch(url, {
+      redirect: "follow",
+      signal: AbortSignal.timeout(8000),
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; CarImportCalculator/1.0)" },
+    });
+  } catch (err) {
+    return res.status(502).json({ error: `Could not fetch listing (${err.name || "network error"}). Try pasting the details manually.` });
+  }
+  if (!response.ok) {
+    return res.status(502).json({ error: `Listing site returned ${response.status} — it may block automated access.` });
+  }
+  const html = await response.text();
+  if (html.length > 2_000_000) {
+    return res.status(502).json({ error: "Listing page is too large to parse." });
+  }
+
+  const fxRate = await getEurPerGbp();
+  const extracted = extractListing(url, html, { fxRate });
+  res.json({ url, fxRate, ...extracted });
+});
+
+// ── Serve SPA ───────────────────────────────────────────────────────
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`
+  ╔═══════════════════════════════════════════════╗
+  ║  🚗 Car Import Cost Calculator (UK/NI → IE)   ║
+  ║  http://0.0.0.0:${String(PORT).padEnd(36)}║
+  ╚═══════════════════════════════════════════════╝
+  `);
+});
