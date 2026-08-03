@@ -23,10 +23,13 @@ test("matchMake resolves aliases", () => {
 });
 
 test("matchModel is tolerant of trim suffixes", () => {
-  assert.equal(specs.matchModel("Volkswagen", "Golf GTI"), "Golf");
+  // Exact dedicated key wins over base-key fallback
+  assert.equal(specs.matchModel("Volkswagen", "Golf GTI"), "Golf GTI");
   assert.equal(specs.matchModel("BMW", "1 Series M Sport"), "1 Series");
   assert.equal(specs.matchModel("Toyota", "Corolla Hybrid"), "Corolla");
   assert.equal(specs.matchModel("Ford", "Focus ST-Line"), "Focus");
+  // Prefix matching: M3 Competition falls under M3
+  assert.equal(specs.matchModel("BMW", "M3 Competition"), "M3");
 });
 
 test("modelsFor returns sorted model list", () => {
@@ -104,4 +107,77 @@ test("normalizeFuel", () => {
   assert.equal(specs.normalizeFuel("PHEV"), "hybrid");
   assert.equal(specs.normalizeFuel("Petrol"), "petrol");
   assert.equal(specs.normalizeFuel(null), null);
+});
+
+test("matchMake resolves chevy and rolls aliases", () => {
+  assert.equal(specs.matchMake("chevy"), "Chevrolet");
+  assert.equal(specs.matchMake("Chevy"), "Chevrolet");
+  assert.equal(specs.matchMake("rolls"), "Rolls-Royce");
+  assert.equal(specs.matchMake("Rolls Royce"), "Rolls-Royce");
+});
+
+test("new performance makes are in MAKES", () => {
+  ["Chevrolet", "Rolls-Royce", "Subaru", "Lotus", "Lamborghini", "Ferrari",
+   "Maserati", "McLaren", "DS", "Genesis", "Infiniti", "Isuzu", "Lancia",
+   "SsangYong", "Chrysler", "Rover"].forEach((m) => {
+    assert.ok(specs.MAKES.includes(m), `${m} should be in MAKES`);
+  });
+});
+
+test("Porsche 911 lookup", () => {
+  const r = specs.lookup("Porsche", "911", 2020);
+  assert.ok(r);
+  assert.equal(r.model, "911");
+  assert.equal(r.fuelType, "petrol");
+  assert.equal(r.co2Standard, "wltp");
+  assert.ok(r.co2 > 150 && r.co2 < 230);
+});
+
+test("Chevrolet Corvette lookup", () => {
+  const r = specs.lookup("Chevrolet", "Corvette", 2021);
+  assert.ok(r);
+  assert.equal(r.fuelType, "petrol");
+  assert.ok(r.co2 > 200 && r.co2 < 320);
+});
+
+test("Subaru WRX STI lookup", () => {
+  const r = specs.lookup("Subaru", "WRX STI", 2015);
+  assert.ok(r);
+  assert.equal(r.fuelType, "petrol");
+  assert.ok(r.co2 > 180 && r.co2 < 300);
+});
+
+test("Lotus Emira lookup", () => {
+  const r = specs.lookup("Lotus", "Emira", 2023);
+  assert.ok(r);
+  assert.equal(r.fuelType, "petrol");
+  assert.ok(r.co2 > 150 && r.co2 < 250);
+});
+
+test("Lamborghini Huracan lookup", () => {
+  const r = specs.lookup("Lamborghini", "Huracan", 2020);
+  assert.ok(r);
+  assert.equal(r.fuelType, "petrol");
+  assert.ok(r.co2 > 230 && r.co2 < 320);
+});
+
+test("Ferrari 488 lookup", () => {
+  const r = specs.lookup("Ferrari", "488", 2017);
+  assert.ok(r);
+  assert.equal(r.fuelType, "petrol");
+  assert.ok(r.co2 > 200 && r.co2 < 340);
+});
+
+test("McLaren 720S lookup", () => {
+  const r = specs.lookup("McLaren", "720S", 2018);
+  assert.ok(r);
+  assert.equal(r.fuelType, "petrol");
+  assert.ok(r.co2 > 200 && r.co2 < 330);
+});
+
+test("Rolls-Royce Cullinan lookup", () => {
+  const r = specs.lookup("Rolls-Royce", "Cullinan", 2020);
+  assert.ok(r);
+  assert.equal(r.fuelType, "petrol");
+  assert.ok(r.co2 > 260 && r.co2 < 360);
 });
