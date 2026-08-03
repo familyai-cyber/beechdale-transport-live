@@ -160,6 +160,19 @@ fieldset.segmented legend { font-weight: 600; font-size: 0.9rem; margin-bottom: 
   margin-bottom: 10px;
 }
 .listing-field { flex: 1; min-width: 0; }
+.url-clear-wrap { position: relative; display: flex; align-items: center; }
+.url-clear-wrap input { width: 100%; padding-right: 34px; }
+.clear-btn {
+  position: absolute; right: 8px;
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  border: none; border-radius: 50%;
+  background: #e2e8f0; color: #475569;
+  font-size: 0.9rem; line-height: 1;
+  cursor: pointer;
+}
+.clear-btn:hover { background: #cbd5e1; color: #0f172a; }
+.other-input { margin-top: 2px; }
 .btn-secondary {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   flex: 0 0 auto;

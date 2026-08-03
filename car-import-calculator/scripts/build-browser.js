@@ -2,9 +2,10 @@
  * Build a browser bundle from the CommonJS source modules.
  *
  * Outputs public/js/calc-bundle.js exposing window.CarCalc (the calculation
- * engine) and window.CarListingParser (listing extraction) — the same code
- * used by the server, so the app works fully client-side (required for
- * static hosting such as GitHub Pages).
+ * engine), window.CarListingParser (listing extraction) and window.CarSpecs
+ * (known-car-specs knowledge base) — the same code used by the server, so the
+ * app works fully client-side (required for static hosting such as GitHub
+ * Pages).
  *
  * Run:  node scripts/build-browser.js
  */
@@ -28,11 +29,12 @@ function indent(text, n) {
 const taxConfigSrc = SRC("tax-config.js");
 const calculatorSrc = SRC("calculator.js");
 const listingParserSrc = SRC("listing-parser.js");
+const carSpecsSrc = SRC("car-specs.js");
 
 const banner = `/**
- * calc-bundle.js — AUTO-GENERATED from src/tax-config.js, src/calculator.js
- * and src/listing-parser.js. Do not edit directly; regenerate with:
- *   node scripts/build-browser.js
+ * calc-bundle.js — AUTO-GENERATED from src/tax-config.js, src/calculator.js,
+ * src/listing-parser.js and src/car-specs.js. Do not edit directly;
+ * regenerate with:  node scripts/build-browser.js
  */
 /* global window */
 (function (global) {
@@ -73,8 +75,18 @@ ${indent(listingParserSrc, 6)}
   }
   var listingParser = loadListingParser();
 
+  function loadCarSpecs() {
+    var module = { exports: {} };
+    (function (module) {
+${indent(carSpecsSrc, 6)}
+    })(module);
+    return module.exports;
+  }
+  var carSpecs = loadCarSpecs();
+
   global.CarCalc = calculator;
   global.CarListingParser = listingParser;
+  global.CarSpecs = carSpecs;
 })(typeof window !== "undefined" ? window : this);
 `;
 

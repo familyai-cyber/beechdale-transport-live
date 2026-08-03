@@ -1,7 +1,7 @@
 /**
- * calc-bundle.js — AUTO-GENERATED from src/tax-config.js, src/calculator.js
- * and src/listing-parser.js. Do not edit directly; regenerate with:
- *   node scripts/build-browser.js
+ * calc-bundle.js — AUTO-GENERATED from src/tax-config.js, src/calculator.js,
+ * src/listing-parser.js and src/car-specs.js. Do not edit directly;
+ * regenerate with:  node scripts/build-browser.js
  */
 /* global window */
 (function (global) {
@@ -915,6 +915,1333 @@
   }
   var listingParser = loadListingParser();
 
+  function loadCarSpecs() {
+    var module = { exports: {} };
+    (function (module) {
+      /**
+       * car-specs.js — a compact knowledge base of TYPICAL car specifications for
+       * the most common UK-used cars imported to Ireland.
+       *
+       * Purpose: when a listing link only gives make/model/year (or the user picks
+       * a make, model and year), we can auto-fill CO2, fuel type, CO2 test standard
+       * and a typical NOx figure — so the import estimate is accurate without the
+       * user hunting for V5C figures.
+       *
+       * IMPORTANT: all CO2/NOx values are TYPICAL figures for the model & era
+       * (combined test-cycle values), not exact per-VIN numbers. The UI must say so.
+       *
+       * Data model (kept compact):
+       *   SPECS = {
+       *     "Volkswagen": {
+       *       "Golf": {                                   // model key
+       *         fuel: "petrol",                           // typical fuel for this model
+       *         ranges: [
+       *           { from: 2009, to: 2012, petrol: 145, diesel: 123, standard: "nedc" },
+       *           { from: 2018, to: 2026, petrol: 112, diesel: 104, hybrid: 100, standard: "wltp" }
+       *         ]
+       *       }
+       *     }
+       *   }
+       * Range fields: petrol / diesel / hybrid / electric (g/km). `standard` is the
+       * test cycle the quoted figures use ("nedc" | "wltp"). Ranges without a
+       * `standard` default to "nedc" for years < 2018 and "wltp" from 2018.
+       * A model with only an `electric` field is a pure EV (CO2 = 0).
+       *
+       * NOx: a typical figure is derived per era & fuel unless a range overrides it
+       * via `noxDiesel` / `noxPetrol` / `noxHybrid`.
+       */
+
+      "use strict";
+
+      // ── Typical NOx (mg/km) by era & fuel — used unless a range overrides ──
+      const DEFAULT_NOX = {
+        nedc: { petrol: 42, diesel: 165, hybrid: 42 },
+        wltp: { petrol: 20, diesel: 52, hybrid: 20 },
+      };
+
+      const SPECS = {
+        Vauxhall: {
+          Corsa: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2008, to: 2014, petrol: 130, diesel: 115, standard: "nedc" },
+              { from: 2015, to: 2019, petrol: 117, diesel: 92, standard: "nedc" },
+              { from: 2020, to: 2026, petrol: 118, diesel: 105, standard: "wltp" },
+            ],
+          },
+          "Corsa-e": {
+            fuel: "electric",
+            ranges: [{ from: 2020, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          Astra: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2010, to: 2015, petrol: 138, diesel: 106, standard: "nedc" },
+              { from: 2016, to: 2019, petrol: 126, diesel: 97, standard: "nedc" },
+              { from: 2020, to: 2026, petrol: 125, diesel: 110, standard: "wltp" },
+            ],
+          },
+          Mokka: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2013, to: 2019, petrol: 135, diesel: 114, standard: "nedc" },
+              { from: 2021, to: 2026, petrol: 130, diesel: 120, standard: "wltp" },
+            ],
+          },
+          Insignia: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2009, to: 2017, petrol: 160, diesel: 124, standard: "nedc" },
+              { from: 2018, to: 2022, petrol: 138, diesel: 118, standard: "wltp" },
+            ],
+          },
+          Grandland: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2018, to: 2023, petrol: 131, diesel: 122, standard: "wltp" },
+            ],
+          },
+        },
+
+        Ford: {
+          Fiesta: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2008, to: 2012, petrol: 118, diesel: 98, standard: "nedc" },
+              { from: 2013, to: 2017, petrol: 104, diesel: 89, standard: "nedc" },
+              { from: 2018, to: 2023, petrol: 102, diesel: 99, standard: "wltp" },
+            ],
+          },
+          Focus: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2009, to: 2015, petrol: 129, diesel: 104, standard: "nedc" },
+              { from: 2016, to: 2018, petrol: 124, diesel: 95, standard: "nedc" },
+              { from: 2019, to: 2026, petrol: 122, diesel: 108, standard: "wltp" },
+            ],
+          },
+          Kuga: {
+            fuel: "diesel",
+            ranges: [
+              { from: 2009, to: 2012, petrol: 169, diesel: 149, standard: "nedc" },
+              { from: 2013, to: 2019, petrol: 142, diesel: 115, standard: "nedc" },
+              { from: 2020, to: 2026, petrol: 128, diesel: 125, hybrid: 30, standard: "wltp" },
+            ],
+          },
+          Puma: {
+            fuel: "petrol",
+            ranges: [{ from: 2020, to: 2026, petrol: 120, standard: "wltp" }],
+          },
+          Mondeo: {
+            fuel: "diesel",
+            ranges: [
+              { from: 2008, to: 2014, petrol: 169, diesel: 134, standard: "nedc" },
+              { from: 2015, to: 2019, petrol: 129, diesel: 104, standard: "nedc" },
+            ],
+          },
+          Mustang: {
+            fuel: "petrol",
+            ranges: [{ from: 2016, to: 2022, petrol: 249, standard: "wltp" }],
+          },
+        },
+
+        Volkswagen: {
+          Golf: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2009, to: 2012, petrol: 145, diesel: 123, standard: "nedc" },
+              { from: 2013, to: 2016, petrol: 118, diesel: 106, standard: "nedc" },
+              { from: 2017, to: 2019, petrol: 116, diesel: 108, standard: "wltp" },
+              { from: 2020, to: 2026, petrol: 112, diesel: 104, hybrid: 100, standard: "wltp" },
+            ],
+          },
+          Polo: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2010, to: 2014, petrol: 112, diesel: 99, standard: "nedc" },
+              { from: 2015, to: 2017, petrol: 103, diesel: 92, standard: "nedc" },
+              { from: 2018, to: 2026, petrol: 105, diesel: 100, standard: "wltp" },
+            ],
+          },
+          Passat: {
+            fuel: "diesel",
+            ranges: [
+              { from: 2011, to: 2015, petrol: 145, diesel: 112, standard: "nedc" },
+              { from: 2016, to: 2019, petrol: 135, diesel: 105, standard: "nedc" },
+              { from: 2020, to: 2026, petrol: 128, diesel: 108, standard: "wltp" },
+            ],
+          },
+          Tiguan: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2012, to: 2016, petrol: 152, diesel: 125, standard: "nedc" },
+              { from: 2017, to: 2020, petrol: 140, diesel: 118, standard: "wltp" },
+              { from: 2021, to: 2026, petrol: 134, diesel: 124, standard: "wltp" },
+            ],
+          },
+          "T-Roc": {
+            fuel: "petrol",
+            ranges: [
+              { from: 2018, to: 2021, petrol: 124, diesel: 116, standard: "wltp" },
+              { from: 2022, to: 2026, petrol: 121, diesel: 112, standard: "wltp" },
+            ],
+          },
+          "T-Cross": {
+            fuel: "petrol",
+            ranges: [{ from: 2019, to: 2026, petrol: 116, standard: "wltp" }],
+          },
+          ID3: {
+            fuel: "electric",
+            ranges: [{ from: 2020, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          ID4: {
+            fuel: "electric",
+            ranges: [{ from: 2021, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          Up: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2012, to: 2016, petrol: 100, standard: "nedc" },
+              { from: 2017, to: 2023, petrol: 98, standard: "wltp" },
+            ],
+          },
+        },
+
+        BMW: {
+          "1 Series": {
+            fuel: "petrol",
+            ranges: [
+              { from: 2012, to: 2015, petrol: 133, diesel: 109, standard: "nedc" },
+              { from: 2016, to: 2019, petrol: 123, diesel: 103, standard: "nedc" },
+              { from: 2020, to: 2026, petrol: 129, diesel: 112, standard: "wltp" },
+            ],
+          },
+          "3 Series": {
+            fuel: "diesel",
+            ranges: [
+              { from: 2012, to: 2015, petrol: 134, diesel: 118, standard: "nedc" },
+              { from: 2016, to: 2019, petrol: 131, diesel: 109, standard: "nedc" },
+              { from: 2020, to: 2026, petrol: 132, diesel: 117, standard: "wltp" },
+            ],
+          },
+          "5 Series": {
+            fuel: "diesel",
+            ranges: [
+              { from: 2011, to: 2016, petrol: 149, diesel: 119, standard: "nedc" },
+              { from: 2017, to: 2020, petrol: 138, diesel: 116, standard: "wltp" },
+              { from: 2021, to: 2026, petrol: 135, diesel: 122, standard: "wltp" },
+            ],
+          },
+          X1: {
+            fuel: "diesel",
+            ranges: [
+              { from: 2012, to: 2015, petrol: 149, diesel: 124, standard: "nedc" },
+              { from: 2016, to: 2019, petrol: 140, diesel: 115, standard: "nedc" },
+              { from: 2020, to: 2026, petrol: 138, diesel: 122, standard: "wltp" },
+            ],
+          },
+          X3: {
+            fuel: "diesel",
+            ranges: [
+              { from: 2012, to: 2016, petrol: 159, diesel: 131, standard: "nedc" },
+              { from: 2018, to: 2021, petrol: 144, diesel: 127, standard: "wltp" },
+              { from: 2022, to: 2026, petrol: 138, diesel: 125, standard: "wltp" },
+            ],
+          },
+          i3: {
+            fuel: "electric",
+            ranges: [{ from: 2014, to: 2022, electric: 0, standard: "wltp" }],
+          },
+        },
+
+        Audi: {
+          A1: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2011, to: 2014, petrol: 114, diesel: 99, standard: "nedc" },
+              { from: 2015, to: 2018, petrol: 107, diesel: 95, standard: "nedc" },
+              { from: 2019, to: 2023, petrol: 110, diesel: 105, standard: "wltp" },
+            ],
+          },
+          A3: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2012, to: 2016, petrol: 125, diesel: 108, standard: "nedc" },
+              { from: 2017, to: 2020, petrol: 123, diesel: 105, standard: "wltp" },
+              { from: 2021, to: 2026, petrol: 120, diesel: 110, standard: "wltp" },
+            ],
+          },
+          A4: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2012, to: 2016, petrol: 135, diesel: 111, standard: "nedc" },
+              { from: 2017, to: 2019, petrol: 128, diesel: 108, standard: "wltp" },
+              { from: 2020, to: 2026, petrol: 124, diesel: 112, standard: "wltp" },
+            ],
+          },
+          A5: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2012, to: 2016, petrol: 146, diesel: 122, standard: "nedc" },
+              { from: 2017, to: 2020, petrol: 138, diesel: 117, standard: "wltp" },
+              { from: 2021, to: 2026, petrol: 135, diesel: 118, standard: "wltp" },
+            ],
+          },
+          Q3: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2012, to: 2018, petrol: 145, diesel: 126, standard: "nedc" },
+              { from: 2019, to: 2026, petrol: 132, diesel: 120, standard: "wltp" },
+            ],
+          },
+          Q5: {
+            fuel: "diesel",
+            ranges: [
+              { from: 2013, to: 2017, petrol: 156, diesel: 130, standard: "nedc" },
+              { from: 2018, to: 2026, petrol: 143, diesel: 122, standard: "wltp" },
+            ],
+          },
+          "e-tron": {
+            fuel: "electric",
+            ranges: [{ from: 2019, to: 2023, electric: 0, standard: "wltp" }],
+          },
+        },
+
+        "Mercedes-Benz": {
+          "A-Class": {
+            fuel: "petrol",
+            ranges: [
+              { from: 2013, to: 2018, petrol: 117, diesel: 100, standard: "nedc" },
+              { from: 2019, to: 2026, petrol: 119, diesel: 104, standard: "wltp" },
+            ],
+          },
+          "C-Class": {
+            fuel: "petrol",
+            ranges: [
+              { from: 2011, to: 2014, petrol: 138, diesel: 114, standard: "nedc" },
+              { from: 2015, to: 2018, petrol: 126, diesel: 108, standard: "nedc" },
+              { from: 2019, to: 2026, petrol: 127, diesel: 114, standard: "wltp" },
+            ],
+          },
+          "E-Class": {
+            fuel: "diesel",
+            ranges: [
+              { from: 2010, to: 2016, petrol: 154, diesel: 124, standard: "nedc" },
+              { from: 2017, to: 2020, petrol: 138, diesel: 118, standard: "wltp" },
+              { from: 2021, to: 2026, petrol: 133, diesel: 122, standard: "wltp" },
+            ],
+          },
+          GLA: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2014, to: 2019, petrol: 135, diesel: 114, standard: "nedc" },
+              { from: 2020, to: 2026, petrol: 131, diesel: 118, standard: "wltp" },
+            ],
+          },
+          GLC: {
+            fuel: "diesel",
+            ranges: [
+              { from: 2016, to: 2019, petrol: 149, diesel: 126, standard: "nedc" },
+              { from: 2020, to: 2026, petrol: 141, diesel: 129, standard: "wltp" },
+            ],
+          },
+        },
+
+        Toyota: {
+          Yaris: {
+            fuel: "hybrid",
+            ranges: [
+              { from: 2012, to: 2016, petrol: 104, hybrid: 100, standard: "nedc" },
+              { from: 2017, to: 2020, petrol: 100, hybrid: 85, standard: "wltp" },
+              { from: 2021, to: 2026, hybrid: 95, standard: "wltp" },
+            ],
+          },
+          Corolla: {
+            fuel: "hybrid",
+            ranges: [
+              { from: 2013, to: 2018, petrol: 130, diesel: 112, standard: "nedc" },
+              { from: 2019, to: 2026, hybrid: 105, standard: "wltp" },
+            ],
+          },
+          Auris: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2013, to: 2018, petrol: 128, diesel: 104, hybrid: 90, standard: "nedc" },
+            ],
+          },
+          RAV4: {
+            fuel: "hybrid",
+            ranges: [
+              { from: 2013, to: 2018, petrol: 145, diesel: 127, hybrid: 118, standard: "nedc" },
+              { from: 2019, to: 2026, hybrid: 112, standard: "wltp" },
+            ],
+          },
+          "C-HR": {
+            fuel: "hybrid",
+            ranges: [
+              { from: 2017, to: 2020, petrol: 126, hybrid: 94, standard: "wltp" },
+              { from: 2021, to: 2026, hybrid: 108, standard: "wltp" },
+            ],
+          },
+          Hilux: {
+            fuel: "diesel",
+            ranges: [{ from: 2016, to: 2026, diesel: 204, standard: "wltp" }],
+          },
+          Prius: {
+            fuel: "hybrid",
+            ranges: [{ from: 2016, to: 2020, hybrid: 82, standard: "wltp" }],
+          },
+          Aygo: {
+            fuel: "petrol",
+            ranges: [{ from: 2014, to: 2021, petrol: 93, standard: "nedc" }],
+          },
+        },
+
+        Nissan: {
+          Qashqai: {
+            fuel: "diesel",
+            ranges: [
+              { from: 2011, to: 2013, petrol: 148, diesel: 129, standard: "nedc" },
+              { from: 2014, to: 2018, petrol: 132, diesel: 104, standard: "nedc" },
+              { from: 2019, to: 2021, petrol: 128, diesel: 110, standard: "wltp" },
+              { from: 2022, to: 2026, petrol: 118, hybrid: 105, standard: "wltp" },
+            ],
+          },
+          Juke: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2011, to: 2015, petrol: 137, diesel: 109, standard: "nedc" },
+              { from: 2016, to: 2019, petrol: 122, diesel: 102, standard: "nedc" },
+              { from: 2020, to: 2026, petrol: 115, standard: "wltp" },
+            ],
+          },
+          Leaf: {
+            fuel: "electric",
+            ranges: [{ from: 2011, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          Micra: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2011, to: 2016, petrol: 120, diesel: 99, standard: "nedc" },
+              { from: 2017, to: 2022, petrol: 106, standard: "wltp" },
+            ],
+          },
+          "X-Trail": {
+            fuel: "diesel",
+            ranges: [
+              { from: 2014, to: 2021, petrol: 158, diesel: 129, standard: "nedc" },
+              { from: 2022, to: 2026, hybrid: 145, standard: "wltp" },
+            ],
+          },
+          Ariya: {
+            fuel: "electric",
+            ranges: [{ from: 2022, to: 2026, electric: 0, standard: "wltp" }],
+          },
+        },
+
+        Hyundai: {
+          i10: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2011, to: 2019, petrol: 110, standard: "nedc" },
+              { from: 2020, to: 2026, petrol: 106, standard: "wltp" },
+            ],
+          },
+          i20: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2012, to: 2016, petrol: 113, standard: "nedc" },
+              { from: 2017, to: 2020, petrol: 108, standard: "nedc" },
+              { from: 2021, to: 2026, petrol: 109, standard: "wltp" },
+            ],
+          },
+          i30: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2012, to: 2016, petrol: 134, diesel: 115, standard: "nedc" },
+              { from: 2017, to: 2020, petrol: 128, diesel: 105, standard: "wltp" },
+              { from: 2021, to: 2026, petrol: 126, diesel: 110, standard: "wltp" },
+            ],
+          },
+          Tucson: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2011, to: 2015, petrol: 155, diesel: 138, standard: "nedc" },
+              { from: 2016, to: 2020, petrol: 141, diesel: 126, standard: "nedc" },
+              { from: 2021, to: 2026, petrol: 126, diesel: 115, hybrid: 120, standard: "wltp" },
+            ],
+          },
+          Kona: {
+            fuel: "petrol",
+            ranges: [{ from: 2018, to: 2023, petrol: 119, standard: "wltp" }],
+          },
+          "Kona Electric": {
+            fuel: "electric",
+            ranges: [{ from: 2018, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          "IONIQ 5": {
+            fuel: "electric",
+            ranges: [{ from: 2021, to: 2026, electric: 0, standard: "wltp" }],
+          },
+        },
+
+        Kia: {
+          Picanto: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2012, to: 2016, petrol: 108, standard: "nedc" },
+              { from: 2017, to: 2020, petrol: 101, standard: "nedc" },
+              { from: 2021, to: 2026, petrol: 112, standard: "wltp" },
+            ],
+          },
+          Rio: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2012, to: 2016, petrol: 114, standard: "nedc" },
+              { from: 2017, to: 2023, petrol: 108, standard: "wltp" },
+            ],
+          },
+          Ceed: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2013, to: 2017, petrol: 128, diesel: 104, standard: "nedc" },
+              { from: 2018, to: 2021, petrol: 128, diesel: 114, standard: "wltp" },
+              { from: 2022, to: 2026, petrol: 124, diesel: 112, standard: "wltp" },
+            ],
+          },
+          Sportage: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2011, to: 2015, petrol: 158, diesel: 137, standard: "nedc" },
+              { from: 2016, to: 2020, petrol: 143, diesel: 125, standard: "nedc" },
+              { from: 2021, to: 2026, petrol: 125, diesel: 113, hybrid: 130, standard: "wltp" },
+            ],
+          },
+          Niro: {
+            fuel: "hybrid",
+            ranges: [
+              { from: 2017, to: 2022, hybrid: 92, standard: "wltp" },
+              { from: 2023, to: 2026, hybrid: 98, standard: "wltp" },
+            ],
+          },
+          "e-Niro": {
+            fuel: "electric",
+            ranges: [{ from: 2019, to: 2022, electric: 0, standard: "wltp" }],
+          },
+        },
+
+        Peugeot: {
+          208: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2013, to: 2019, petrol: 100, diesel: 89, standard: "nedc" },
+              { from: 2020, to: 2026, petrol: 102, diesel: 102, standard: "wltp" },
+            ],
+          },
+          "e-208": {
+            fuel: "electric",
+            ranges: [{ from: 2020, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          308: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2011, to: 2016, petrol: 116, diesel: 98, standard: "nedc" },
+              { from: 2017, to: 2021, petrol: 104, diesel: 98, standard: "nedc" },
+              { from: 2022, to: 2026, petrol: 106, hybrid: 100, standard: "wltp" },
+            ],
+          },
+          2008: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2013, to: 2019, petrol: 114, diesel: 104, standard: "nedc" },
+              { from: 2020, to: 2026, petrol: 113, diesel: 112, standard: "wltp" },
+            ],
+          },
+          3008: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2013, to: 2016, petrol: 135, diesel: 114, standard: "nedc" },
+              { from: 2017, to: 2021, petrol: 126, diesel: 112, standard: "wltp" },
+              { from: 2022, to: 2026, petrol: 120, hybrid: 112, standard: "wltp" },
+            ],
+          },
+          5008: {
+            fuel: "diesel",
+            ranges: [
+              { from: 2013, to: 2016, petrol: 139, diesel: 115, standard: "nedc" },
+              { from: 2017, to: 2023, petrol: 126, diesel: 118, standard: "wltp" },
+            ],
+          },
+        },
+
+        Renault: {
+          Clio: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2010, to: 2012, petrol: 127, diesel: 104, standard: "nedc" },
+              { from: 2013, to: 2019, petrol: 102, diesel: 92, standard: "nedc" },
+              { from: 2020, to: 2026, petrol: 103, hybrid: 96, standard: "wltp" },
+            ],
+          },
+          Captur: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2014, to: 2019, petrol: 113, diesel: 100, standard: "nedc" },
+              { from: 2020, to: 2026, petrol: 112, hybrid: 105, standard: "wltp" },
+            ],
+          },
+          Megane: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2010, to: 2013, petrol: 138, diesel: 114, standard: "nedc" },
+              { from: 2014, to: 2018, petrol: 118, diesel: 95, standard: "nedc" },
+              { from: 2019, to: 2022, petrol: 110, diesel: 104, standard: "wltp" },
+            ],
+          },
+          Kadjar: {
+            fuel: "diesel",
+            ranges: [
+              { from: 2015, to: 2019, petrol: 128, diesel: 110, standard: "nedc" },
+              { from: 2020, to: 2022, petrol: 122, diesel: 116, standard: "wltp" },
+            ],
+          },
+          Zoe: {
+            fuel: "electric",
+            ranges: [{ from: 2013, to: 2023, electric: 0, standard: "wltp" }],
+          },
+        },
+
+        Skoda: {
+          Fabia: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2011, to: 2014, petrol: 116, diesel: 102, standard: "nedc" },
+              { from: 2015, to: 2017, petrol: 104, diesel: 96, standard: "nedc" },
+              { from: 2018, to: 2021, petrol: 108, diesel: 101, standard: "wltp" },
+            ],
+          },
+          Octavia: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2010, to: 2012, petrol: 148, diesel: 129, standard: "nedc" },
+              { from: 2013, to: 2017, petrol: 124, diesel: 106, standard: "nedc" },
+              { from: 2018, to: 2020, petrol: 112, diesel: 102, standard: "wltp" },
+              { from: 2021, to: 2026, petrol: 110, diesel: 100, standard: "wltp" },
+            ],
+          },
+          Karoq: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2018, to: 2021, petrol: 122, diesel: 116, standard: "wltp" },
+              { from: 2022, to: 2026, petrol: 118, diesel: 112, standard: "wltp" },
+            ],
+          },
+          Kodiaq: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2017, to: 2020, petrol: 128, diesel: 120, standard: "wltp" },
+              { from: 2021, to: 2026, petrol: 124, diesel: 118, standard: "wltp" },
+            ],
+          },
+          Superb: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2011, to: 2015, petrol: 149, diesel: 119, standard: "nedc" },
+              { from: 2016, to: 2019, petrol: 136, diesel: 109, standard: "nedc" },
+              { from: 2020, to: 2026, petrol: 130, diesel: 115, standard: "wltp" },
+            ],
+          },
+        },
+
+        Seat: {
+          Ibiza: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2012, to: 2016, petrol: 105, diesel: 98, standard: "nedc" },
+              { from: 2017, to: 2021, petrol: 104, diesel: 100, standard: "wltp" },
+            ],
+          },
+          Leon: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2013, to: 2017, petrol: 114, diesel: 104, standard: "nedc" },
+              { from: 2018, to: 2020, petrol: 110, diesel: 108, standard: "wltp" },
+              { from: 2021, to: 2026, petrol: 108, diesel: 104, standard: "wltp" },
+            ],
+          },
+          Arona: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2018, to: 2026, petrol: 112, diesel: 108, standard: "wltp" },
+            ],
+          },
+          Ateca: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2017, to: 2020, petrol: 126, diesel: 116, standard: "wltp" },
+              { from: 2021, to: 2026, petrol: 122, diesel: 112, standard: "wltp" },
+            ],
+          },
+        },
+
+        Tesla: {
+          "Model 3": {
+            fuel: "electric",
+            ranges: [{ from: 2019, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          "Model Y": {
+            fuel: "electric",
+            ranges: [{ from: 2021, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          "Model S": {
+            fuel: "electric",
+            ranges: [{ from: 2014, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          "Model X": {
+            fuel: "electric",
+            ranges: [{ from: 2016, to: 2026, electric: 0, standard: "wltp" }],
+          },
+        },
+
+        Mini: {
+          Cooper: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2007, to: 2013, petrol: 130, diesel: 119, standard: "nedc" },
+              { from: 2014, to: 2017, petrol: 112, diesel: 95, standard: "nedc" },
+              { from: 2018, to: 2023, petrol: 108, diesel: 99, standard: "wltp" },
+            ],
+          },
+          Clubman: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2016, to: 2019, petrol: 118, diesel: 104, standard: "nedc" },
+              { from: 2020, to: 2023, petrol: 116, diesel: 104, standard: "wltp" },
+            ],
+          },
+          Countryman: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2013, to: 2016, petrol: 139, diesel: 115, standard: "nedc" },
+              { from: 2017, to: 2020, petrol: 132, diesel: 112, standard: "wltp" },
+              { from: 2021, to: 2026, petrol: 128, diesel: 118, standard: "wltp" },
+            ],
+          },
+        },
+
+        Volvo: {
+          XC40: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2018, to: 2021, petrol: 134, diesel: 117, standard: "wltp" },
+              { from: 2022, to: 2026, petrol: 128, hybrid: 115, standard: "wltp" },
+            ],
+          },
+          XC60: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2012, to: 2015, petrol: 168, diesel: 135, standard: "nedc" },
+              { from: 2016, to: 2019, petrol: 156, diesel: 130, standard: "nedc" },
+              { from: 2020, to: 2026, hybrid: 112, standard: "wltp" },
+            ],
+          },
+          V40: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2013, to: 2016, petrol: 125, diesel: 105, standard: "nedc" },
+              { from: 2017, to: 2019, petrol: 117, diesel: 99, standard: "nedc" },
+            ],
+          },
+          V60: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2011, to: 2015, petrol: 144, diesel: 116, standard: "nedc" },
+              { from: 2016, to: 2019, petrol: 133, diesel: 110, standard: "nedc" },
+              { from: 2020, to: 2026, hybrid: 100, standard: "wltp" },
+            ],
+          },
+          "XC40 Recharge": {
+            fuel: "electric",
+            ranges: [{ from: 2020, to: 2026, electric: 0, standard: "wltp" }],
+          },
+        },
+
+        Mazda: {
+          2: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2011, to: 2014, petrol: 105, standard: "nedc" },
+              { from: 2015, to: 2022, petrol: 105, standard: "wltp" },
+            ],
+          },
+          3: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2010, to: 2013, petrol: 139, diesel: 110, standard: "nedc" },
+              { from: 2014, to: 2019, petrol: 127, diesel: 106, standard: "nedc" },
+              { from: 2020, to: 2026, petrol: 112, diesel: 106, standard: "wltp" },
+            ],
+          },
+          6: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2010, to: 2013, petrol: 149, diesel: 130, standard: "nedc" },
+              { from: 2014, to: 2019, petrol: 136, diesel: 112, standard: "nedc" },
+              { from: 2020, to: 2023, petrol: 124, diesel: 110, standard: "wltp" },
+            ],
+          },
+          "CX-5": {
+            fuel: "petrol",
+            ranges: [
+              { from: 2012, to: 2017, petrol: 145, diesel: 119, standard: "nedc" },
+              { from: 2018, to: 2022, petrol: 139, diesel: 122, standard: "wltp" },
+              { from: 2023, to: 2026, petrol: 132, diesel: 122, standard: "wltp" },
+            ],
+          },
+          "CX-30": {
+            fuel: "petrol",
+            ranges: [{ from: 2020, to: 2026, petrol: 119, diesel: 110, standard: "wltp" }],
+          },
+          "MX-5": {
+            fuel: "petrol",
+            ranges: [{ from: 2016, to: 2026, petrol: 139, standard: "wltp" }],
+          },
+        },
+
+        Honda: {
+          Civic: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2009, to: 2011, petrol: 154, diesel: 132, standard: "nedc" },
+              { from: 2012, to: 2016, petrol: 139, diesel: 110, standard: "nedc" },
+              { from: 2017, to: 2021, petrol: 128, diesel: 118, standard: "wltp" },
+              { from: 2022, to: 2026, hybrid: 99, standard: "wltp" },
+            ],
+          },
+          "CR-V": {
+            fuel: "petrol",
+            ranges: [
+              { from: 2008, to: 2012, petrol: 193, diesel: 158, standard: "nedc" },
+              { from: 2013, to: 2017, petrol: 149, diesel: 132, standard: "nedc" },
+              { from: 2018, to: 2022, petrol: 130, hybrid: 128, standard: "wltp" },
+            ],
+          },
+          Jazz: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2009, to: 2014, petrol: 122, standard: "nedc" },
+              { from: 2015, to: 2019, petrol: 106, standard: "nedc" },
+              { from: 2020, to: 2026, hybrid: 101, standard: "wltp" },
+            ],
+          },
+          "HR-V": {
+            fuel: "petrol",
+            ranges: [
+              { from: 2015, to: 2020, petrol: 122, standard: "nedc" },
+              { from: 2022, to: 2026, hybrid: 118, standard: "wltp" },
+            ],
+          },
+        },
+
+        "Land Rover": {
+          Evoque: {
+            fuel: "diesel",
+            ranges: [
+              { from: 2011, to: 2014, petrol: 189, diesel: 139, standard: "nedc" },
+              { from: 2015, to: 2018, petrol: 171, diesel: 131, standard: "nedc" },
+              { from: 2019, to: 2023, petrol: 139, diesel: 132, standard: "wltp" },
+            ],
+          },
+          "Discovery Sport": {
+            fuel: "diesel",
+            ranges: [
+              { from: 2015, to: 2019, petrol: 168, diesel: 139, standard: "nedc" },
+              { from: 2020, to: 2023, petrol: 141, diesel: 136, standard: "wltp" },
+            ],
+          },
+          "Range Rover": {
+            fuel: "diesel",
+            ranges: [
+              { from: 2013, to: 2017, diesel: 172, standard: "nedc" },
+              { from: 2018, to: 2021, diesel: 150, standard: "wltp" },
+              { from: 2022, to: 2026, hybrid: 140, standard: "wltp" },
+            ],
+          },
+          "Range Rover Sport": {
+            fuel: "diesel",
+            ranges: [
+              { from: 2013, to: 2017, diesel: 179, standard: "nedc" },
+              { from: 2018, to: 2021, diesel: 158, standard: "wltp" },
+            ],
+          },
+        },
+
+        Dacia: {
+          Duster: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2013, to: 2017, petrol: 136, diesel: 116, standard: "nedc" },
+              { from: 2018, to: 2021, petrol: 125, diesel: 115, standard: "wltp" },
+              { from: 2022, to: 2026, petrol: 126, standard: "wltp" },
+            ],
+          },
+          Sandero: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2013, to: 2016, petrol: 112, standard: "nedc" },
+              { from: 2017, to: 2021, petrol: 108, standard: "nedc" },
+              { from: 2022, to: 2026, petrol: 109, standard: "wltp" },
+            ],
+          },
+        },
+
+        Fiat: {
+          500: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2008, to: 2015, petrol: 113, standard: "nedc" },
+              { from: 2016, to: 2020, petrol: 104, standard: "nedc" },
+              { from: 2021, to: 2026, petrol: 106, hybrid: 90, standard: "wltp" },
+            ],
+          },
+          Panda: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2012, to: 2017, petrol: 116, standard: "nedc" },
+              { from: 2018, to: 2023, petrol: 112, standard: "wltp" },
+            ],
+          },
+          Tipo: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2016, to: 2022, petrol: 118, diesel: 108, standard: "wltp" },
+            ],
+          },
+          "500e": {
+            fuel: "electric",
+            ranges: [{ from: 2021, to: 2026, electric: 0, standard: "wltp" }],
+          },
+        },
+
+        Suzuki: {
+          Swift: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2011, to: 2016, petrol: 115, standard: "nedc" },
+              { from: 2017, to: 2021, petrol: 104, hybrid: 96, standard: "wltp" },
+              { from: 2022, to: 2026, hybrid: 97, standard: "wltp" },
+            ],
+          },
+          Vitara: {
+            fuel: "petrol",
+            ranges: [{ from: 2015, to: 2021, petrol: 119, diesel: 108, standard: "wltp" }],
+          },
+          Ignis: {
+            fuel: "petrol",
+            ranges: [{ from: 2017, to: 2023, petrol: 100, standard: "wltp" }],
+          },
+          Jimny: {
+            fuel: "petrol",
+            ranges: [{ from: 2019, to: 2023, petrol: 161, standard: "wltp" }],
+          },
+        },
+
+        Jaguar: {
+          "E-Pace": {
+            fuel: "petrol",
+            ranges: [
+              { from: 2018, to: 2020, petrol: 131, diesel: 123, standard: "wltp" },
+              { from: 2021, to: 2024, petrol: 128, standard: "wltp" },
+            ],
+          },
+          "F-Pace": {
+            fuel: "diesel",
+            ranges: [
+              { from: 2016, to: 2019, petrol: 145, diesel: 128, standard: "wltp" },
+              { from: 2020, to: 2024, petrol: 136, diesel: 124, standard: "wltp" },
+            ],
+          },
+          XE: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2015, to: 2019, petrol: 131, diesel: 110, standard: "wltp" },
+              { from: 2020, to: 2023, petrol: 124, diesel: 120, standard: "wltp" },
+            ],
+          },
+          XF: {
+            fuel: "diesel",
+            ranges: [
+              { from: 2012, to: 2017, petrol: 139, diesel: 114, standard: "nedc" },
+              { from: 2018, to: 2023, petrol: 130, diesel: 118, standard: "wltp" },
+            ],
+          },
+        },
+
+        Citroen: {
+          C3: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2010, to: 2016, petrol: 121, diesel: 98, standard: "nedc" },
+              { from: 2017, to: 2020, petrol: 102, diesel: 103, standard: "wltp" },
+              { from: 2021, to: 2026, petrol: 103, hybrid: 98, standard: "wltp" },
+            ],
+          },
+          C4: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2011, to: 2016, petrol: 128, diesel: 106, standard: "nedc" },
+              { from: 2021, to: 2026, petrol: 110, hybrid: 108, standard: "wltp" },
+            ],
+          },
+          "C3 Aircross": {
+            fuel: "petrol",
+            ranges: [{ from: 2018, to: 2023, petrol: 113, diesel: 108, standard: "wltp" }],
+          },
+          "C5 Aircross": {
+            fuel: "petrol",
+            ranges: [{ from: 2019, to: 2026, petrol: 126, diesel: 115, standard: "wltp" }],
+          },
+        },
+
+        MG: {
+          ZS: {
+            fuel: "petrol",
+            ranges: [{ from: 2018, to: 2021, petrol: 132, standard: "wltp" }],
+          },
+          "ZS EV": {
+            fuel: "electric",
+            ranges: [{ from: 2019, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          HS: {
+            fuel: "petrol",
+            ranges: [{ from: 2019, to: 2023, petrol: 142, standard: "wltp" }],
+          },
+          MG4: {
+            fuel: "electric",
+            ranges: [{ from: 2022, to: 2026, electric: 0, standard: "wltp" }],
+          },
+        },
+
+        Polestar: {
+          2: {
+            fuel: "electric",
+            ranges: [{ from: 2020, to: 2026, electric: 0, standard: "wltp" }],
+          },
+        },
+
+        BYD: {
+          "Atto 3": {
+            fuel: "electric",
+            ranges: [{ from: 2022, to: 2026, electric: 0, standard: "wltp" }],
+          },
+        },
+
+        Lexus: {
+          NX: {
+            fuel: "hybrid",
+            ranges: [
+              { from: 2015, to: 2020, hybrid: 110, standard: "nedc" },
+              { from: 2022, to: 2026, hybrid: 125, standard: "wltp" },
+            ],
+          },
+          RX: {
+            fuel: "hybrid",
+            ranges: [
+              { from: 2012, to: 2017, hybrid: 127, standard: "nedc" },
+              { from: 2018, to: 2022, hybrid: 132, standard: "wltp" },
+              { from: 2023, to: 2026, hybrid: 135, standard: "wltp" },
+            ],
+          },
+          UX: {
+            fuel: "hybrid",
+            ranges: [{ from: 2019, to: 2026, hybrid: 100, standard: "wltp" }],
+          },
+        },
+
+        Mitsubishi: {
+          Outlander: {
+            fuel: "hybrid",
+            ranges: [
+              { from: 2013, to: 2018, petrol: 143, diesel: 124, hybrid: 41, standard: "nedc" },
+              { from: 2019, to: 2021, hybrid: 43, standard: "wltp" },
+            ],
+          },
+          ASX: {
+            fuel: "petrol",
+            ranges: [{ from: 2013, to: 2019, petrol: 144, diesel: 126, standard: "nedc" }],
+          },
+        },
+
+        Jeep: {
+          Renegade: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2015, to: 2019, petrol: 137, diesel: 126, standard: "nedc" },
+              { from: 2020, to: 2023, petrol: 133, diesel: 123, standard: "wltp" },
+            ],
+          },
+          Compass: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2017, to: 2020, petrol: 128, diesel: 124, standard: "wltp" },
+              { from: 2021, to: 2023, petrol: 128, standard: "wltp" },
+            ],
+          },
+        },
+
+        Smart: {
+          ForTwo: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2012, to: 2019, petrol: 103, standard: "nedc" },
+              { from: 2020, to: 2023, petrol: 100, standard: "wltp" },
+            ],
+          },
+        },
+
+        Porsche: {
+          Taycan: {
+            fuel: "electric",
+            ranges: [{ from: 2020, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          Macan: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2014, to: 2018, petrol: 168, diesel: 146, standard: "nedc" },
+              { from: 2019, to: 2023, petrol: 158, standard: "wltp" },
+            ],
+          },
+          Cayenne: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2012, to: 2017, petrol: 189, standard: "nedc" },
+              { from: 2018, to: 2023, petrol: 179, standard: "wltp" },
+            ],
+          },
+        },
+
+        Abarth: {
+          500: {
+            fuel: "petrol",
+            ranges: [{ from: 2012, to: 2020, petrol: 144, standard: "wltp" }],
+          },
+        },
+
+        "Alfa Romeo": {
+          Giulietta: {
+            fuel: "petrol",
+            ranges: [{ from: 2010, to: 2017, petrol: 134, diesel: 116, standard: "nedc" }],
+          },
+          Giulia: {
+            fuel: "petrol",
+            ranges: [
+              { from: 2016, to: 2020, petrol: 140, diesel: 117, standard: "wltp" },
+            ],
+          },
+          Stelvio: {
+            fuel: "petrol",
+            ranges: [{ from: 2017, to: 2023, petrol: 140, diesel: 119, standard: "wltp" }],
+          },
+        },
+
+        Cupra: {
+          Formentor: {
+            fuel: "petrol",
+            ranges: [{ from: 2020, to: 2026, petrol: 134, standard: "wltp" }],
+          },
+        },
+      };
+
+      // ── Make aliases (normalisation) ──
+      const ALIASES = {
+        vw: "Volkswagen",
+        merc: "Mercedes-Benz",
+        mercedes: "Mercedes-Benz",
+        alfa: "Alfa Romeo",
+        landrover: "Land Rover",
+        "land rover": "Land Rover",
+        opel: "Vauxhall",
+        vauxhall: "Vauxhall",
+        chevy: "Chevrolet",
+        rolls: "Rolls-Royce",
+      };
+
+      function norm(str) {
+        return String(str || "")
+          .trim()
+          .toLowerCase()
+          .replace(/[\s_-]+/g, " ");
+      }
+
+      /**
+       * Canonicalise a make name. Returns the canonical key from SPECS if known,
+       * or null if the make is not in the knowledge base.
+       */
+      function matchMake(name) {
+        const key = norm(name);
+        if (!key) return null;
+        if (ALIASES[key]) return ALIASES[key];
+        if (Object.prototype.hasOwnProperty.call(SPECS, name)) return name;
+        const canon = Object.keys(SPECS).find((k) => norm(k) === key);
+        return canon || null;
+      }
+
+      /**
+       * Match a model name against a make's known models. Returns the canonical
+       * model key, or null. Handles extra trim suffixes ("Golf GTI" → "Golf").
+       */
+      function matchModel(make, model) {
+        const canonMake = matchMake(make);
+        if (!canonMake) return null;
+        const models = SPECS[canonMake];
+        if (!models) return null;
+        const key = norm(model);
+        if (!key) return null;
+        const keys = Object.keys(models);
+        const exact = keys.find((k) => norm(k) === key);
+        if (exact) return exact;
+        // prefix match: ad title may say "Golf GTI", "1 Series M Sport" etc.
+        const prefix = keys
+          .filter((k) => key.startsWith(norm(k) + " "))
+          .sort((a, b) => b.length - a.length);
+        return prefix[0] || null;
+      }
+
+      /** Sorted canonical make list. */
+      const MAKES = Object.keys(SPECS).sort();
+
+      /** Sorted model list for a canonical make. */
+      function modelsFor(make) {
+        const canon = matchMake(make);
+        if (!canon) return [];
+        return Object.keys(SPECS[canon]).sort();
+      }
+
+      /**
+       * Typical default fuel type for a model near a given year.
+       * Returns "petrol" | "diesel" | "electric" | "hybrid" | null.
+       * Prefers the model's typical fuel when the era's range has a figure for it;
+       * otherwise falls back by availability (electric > hybrid > diesel > petrol).
+       */
+      function defaultFuel(make, model, year) {
+        const m = findModel(make, model);
+        if (!m) return null;
+        const range = pickRange(m.ranges, year);
+        if (!range) return m.fuel || "petrol";
+        const fuel = m.fuel || "petrol";
+        if (fuel === "electric" && range.electric != null) return "electric";
+        if (fuel === "hybrid" && range.hybrid != null) return "hybrid";
+        if (fuel === "diesel" && range.diesel != null) return "diesel";
+        if (fuel === "petrol" && range.petrol != null) return "petrol";
+        if (range.electric != null) return "electric";
+        if (range.hybrid != null) return "hybrid";
+        if (range.diesel != null) return "diesel";
+        return "petrol";
+      }
+
+      /**
+       * Pick the range that contains `year`; if the year predates the earliest
+       * range use the earliest; if it postdates the latest use the latest.
+       */
+      function pickRange(ranges, year) {
+        const y = Number(year) || 0;
+        if (!ranges || !ranges.length) return null;
+        const hit = ranges.find((r) => y >= r.from && y <= r.to);
+        if (hit) return hit;
+        const sorted = ranges.slice().sort((a, b) => a.from - b.from);
+        if (y < sorted[0].from) return sorted[0];
+        return sorted[sorted.length - 1];
+      }
+
+      function findModel(make, model) {
+        const canonMake = matchMake(make);
+        if (!canonMake) return null;
+        const m = matchModel(canonMake, model);
+        if (!m) return null;
+        return { make: canonMake, model: m, ranges: SPECS[canonMake][m].ranges, fuel: SPECS[canonMake][m].fuel };
+      }
+
+      function co2StandardFor(range, year) {
+        if (range && range.standard) return range.standard;
+        return year >= 2018 ? "wltp" : "nedc";
+      }
+
+      function typicalNox(fuel, standard) {
+        if (fuel === "electric") return 0;
+        const map = DEFAULT_NOX[standard] || DEFAULT_NOX.wltp;
+        return map[fuel] != null ? map[fuel] : map.petrol;
+      }
+
+      /**
+       * Look up typical specs for a known make/model/year.
+       *
+       * @param {string} make
+       * @param {string} model
+       * @param {number} year
+       * @param {string} [fuelType] "petrol"|"diesel"|"electric"|"hybrid" — if omitted
+       *        or no figure exists for it, falls back to the model's typical fuel.
+       * @returns {object|null} { co2, co2Standard, fuelType, nox, make, model }
+       *          or null when the make/model is not in the knowledge base.
+       */
+      function lookup(make, model, year, fuelType) {
+        const m = findModel(make, model);
+        if (!m) return null;
+        const range = pickRange(m.ranges, year);
+        const standard = co2StandardFor(range, year);
+        const fuel = normalizeFuel(fuelType) || defaultFuel(make, model, year);
+
+        let co2 = null;
+        if (fuel === "electric" || range.electric != null) {
+          co2 = 0;
+        } else if (fuel === "diesel" && range.diesel != null) {
+          co2 = range.diesel;
+        } else if (fuel === "hybrid" && range.hybrid != null) {
+          co2 = range.hybrid;
+        } else if (fuel === "hybrid" && range.hybrid == null && range.petrol != null) {
+          co2 = range.petrol;
+        } else if (fuel === "diesel" && range.diesel == null && range.petrol != null) {
+          co2 = range.petrol; // e.g. petrol-only gen but user said diesel
+        } else if (range.petrol != null) {
+          co2 = range.petrol;
+        } else if (range.hybrid != null) {
+          co2 = range.hybrid;
+        } else if (range.diesel != null) {
+          co2 = range.diesel;
+        }
+
+        let nox = null;
+        if (co2 != null) {
+          const effFuel = co2 === 0 ? "electric" : fuel;
+          nox = typicalNox(effFuel, standard);
+        }
+
+        return {
+          make: m.make,
+          model: m.model,
+          co2,
+          co2Standard: standard,
+          fuelType: fuel,
+          nox,
+        };
+      }
+
+      function normalizeFuel(f) {
+        const v = norm(f);
+        if (v === "electric" || v === "ev" || v === "electricity") return "electric";
+        if (v === "diesel") return "diesel";
+        if (v === "hybrid" || v === "phev" || v === "hev" || v === "mild hybrid") return "hybrid";
+        if (v === "petrol" || v === "gasoline") return "petrol";
+        return null;
+      }
+
+      module.exports = { SPECS, MAKES, matchMake, matchModel, modelsFor, lookup, defaultFuel, normalizeFuel };
+
+    })(module);
+    return module.exports;
+  }
+  var carSpecs = loadCarSpecs();
+
   global.CarCalc = calculator;
   global.CarListingParser = listingParser;
+  global.CarSpecs = carSpecs;
 })(typeof window !== "undefined" ? window : this);
