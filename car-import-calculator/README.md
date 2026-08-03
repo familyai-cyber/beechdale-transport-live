@@ -3,6 +3,9 @@
 A standalone web app that estimates the **full one-time cost** of importing a used car
 from **Great Britain** or **Northern Ireland** into the **Republic of Ireland**.
 
+[![Rates Watch](https://github.com/familyai-cyber/beechdale-transport-live/actions/workflows/rates.yml/badge.svg)](https://github.com/familyai-cyber/beechdale-transport-live/actions/workflows/rates.yml)
+[![Live site](https://img.shields.io/badge/live-site-blue)](https://familyai-cyber.github.io/car-import-calculator/)
+
 Enter the car's make/model, year of first registration, CO₂ (g/km), NOx (mg/km, optional),
 fuel type and UK purchase price, choose the registration origin and buyer type, and it
 returns a full breakdown:
@@ -38,8 +41,35 @@ npm start        # http://localhost:3002
 ## Test
 
 ```bash
-npm test         # deterministic unit tests (fixed FX)
+npm test         # all 4 suites: calculator (64) + listing-parser (45) +
+                 # car-specs (27) + rates-watch (7) — deterministic, fixed FX
 ```
+
+## Rate watcher
+
+Tax rates change. [`test/rates-watch.test.js`](test/rates-watch.test.js) snapshots
+every verified rate (duty, import VAT, VRT bands, EV relief, NOx tiers, fees, FX
+fallback) so drift fails loudly. A GitHub Action at
+[`.github/workflows/rates.yml`](../.github/workflows/rates.yml) runs it **every
+Monday 06:00 UTC** and on any change to `tax-config.js` or the snapshot — update the
+snapshot only after re-verifying a changed rate against the official source.
+
+## Serverless listing proxy
+
+GitHub Pages is static, so cross-origin listing fetches (Autotrader, usedcarsni)
+rely on public CORS proxies that are flaky. A ready-to-deploy serverless proxy is
+included at [`functions/parse-listing-proxy.js`](functions/parse-listing-proxy.js) —
+it fetches the advert server-side (real user-agent, worker IP pool) and returns the
+HTML with permissive CORS. Deploy once, then set the URL in
+[`public/js/app.js`](public/js/app.js) `PROXIES[0]`:
+
+```bash
+npm i -g wrangler
+wrangler deploy functions/parse-listing-proxy.js --name car-import-parser
+# then set:  PROXIES[0] url -> https://car-import-parser.<your-subdomain>.workers.dev/?url=…
+```
+
+Until deployed, the app transparently falls back to the existing proxies.
 
 ## API
 

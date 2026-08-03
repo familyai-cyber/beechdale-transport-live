@@ -1,0 +1,45 @@
+name: Rates Watch
+
+# Watches the car-import-calculator tax rates.
+# Runs the rate-watcher snapshot test weekly (and on any change to the rate
+# config or snapshot) so that if Revenue/Citizens Information change a duty,
+# VAT, VRT, EV-relief or NOx figure, the snapshot test fails loudly instead of
+# silently shipping stale numbers. Update the snapshot in
+# car-import-calculator/test/rates-watch.test.js only after re-verifying the
+# new rate against the official source.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # 06:00 UTC every Monday
+  push:
+    paths:
+      - 'car-import-calculator/src/tax-config.js'
+      - 'car-import-calculator/test/rates-watch.test.js'
+      - 'car-import-calculator/package.json'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: car-import-calculator
+
+jobs:
+  rates-snapshot:
+    name: Rates snapshot check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: car-import-calculator/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Rates snapshot test
+        run: node test/rates-watch.test.js
+
+      - name: Full test suite
+        run: npm test

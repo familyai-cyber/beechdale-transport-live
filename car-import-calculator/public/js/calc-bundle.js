@@ -3297,6 +3297,41 @@
         return prefix[0] || null;
       }
 
+      /* ── Source attribution ────────────────────────────────────────────
+         Every figure in the KB is a typical/representative value. This map records
+         where the data came from so the UI can attribute it honestly. */
+      const SOURCE_DEFAULT =
+        "Typical official figures from UK VCA Car Fuel Data / manufacturer data (WLTP from 2018, NEDC before). Verify against the V5C.";
+      const MAKE_SOURCES = {
+        Porsche: "Manufacturer official figures (Porsche GB) / VCA data.",
+        BMW: "Manufacturer official figures (BMW UK) / VCA data.",
+        Mercedes: "Manufacturer official figures (Mercedes-Benz UK) / VCA data.",
+        Audi: "Manufacturer official figures (Audi UK) / VCA data.",
+        "Land Rover": "Manufacturer official figures (Land Rover UK) / VCA data.",
+        Volkswagen: "Manufacturer official figures (Volkswagen UK) / VCA data.",
+        Ford: "Manufacturer official figures (Ford UK) / VCA data.",
+        Tesla: "Manufacturer official figures — electric, 0 g/km.",
+        Nissan: "Manufacturer official figures (Nissan UK) / VCA data.",
+        Toyota: "Manufacturer official figures (Toyota UK) / VCA data.",
+        Honda: "Manufacturer official figures (Honda UK) / VCA data.",
+        Hyundai: "Manufacturer official figures (Hyundai UK) / VCA data.",
+        Kia: "Manufacturer official figures (Kia UK) / VCA data.",
+        Volvo: "Manufacturer official figures (Volvo UK) / VCA data.",
+        Vauxhall: "Manufacturer official figures (Vauxhall UK) / VCA data.",
+      };
+
+      /** Describe where the spec figure for a car comes from. */
+      function sourceFor(make, model, year, fuelType) {
+        const canon = matchMake(make);
+        const m = findModel(canon, model);
+        const fuel = normalizeFuel(fuelType) || (m && defaultFuel(canon, model, year));
+        if (fuel === "electric" || (m && pickRange(m.ranges, year) && pickRange(m.ranges, year).electric != null)) {
+          return "Electric vehicle — 0 g/km (no tailpipe emissions).";
+        }
+        if (canon && MAKE_SOURCES[canon]) return MAKE_SOURCES[canon];
+        return SOURCE_DEFAULT;
+      }
+
       /** Sorted canonical make list. */
       const MAKES = Object.keys(SPECS).sort();
 
@@ -3412,6 +3447,7 @@
           co2Standard: standard,
           fuelType: fuel,
           nox,
+          source: sourceFor(make, model, year, fuel),
         };
       }
 
@@ -3424,7 +3460,7 @@
         return null;
       }
 
-      module.exports = { SPECS, MAKES, matchMake, matchModel, modelsFor, lookup, defaultFuel, normalizeFuel };
+      module.exports = { SPECS, MAKES, matchMake, matchModel, modelsFor, lookup, defaultFuel, normalizeFuel, sourceFor };
 
     })(module);
     return module.exports;
