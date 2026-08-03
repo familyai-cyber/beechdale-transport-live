@@ -181,3 +181,48 @@ test("Rolls-Royce Cullinan lookup", () => {
   assert.equal(r.fuelType, "petrol");
   assert.ok(r.co2 > 260 && r.co2 < 360);
 });
+
+test("EV-only brands are in MAKES", () => {
+  ["Lucid", "Rivian", "GMC", "Rimac"].forEach((m) => {
+    assert.ok(specs.MAKES.includes(m), `${m} should be in MAKES`);
+  });
+});
+
+test("performance EV lookups return zero CO2 / electric fuel", () => {
+  const cases = [
+    ["Ford", "Mustang Mach-E", 2022],
+    ["BMW", "i5", 2024],
+    ["Audi", "RS e-tron GT", 2023],
+    ["Porsche", "Macan Electric", 2025],
+    ["Lotus", "Eletre", 2024],
+    ["Hyundai", "IONIQ 5 N", 2024],
+    ["Polestar", "3", 2024],
+    ["MG", "Cyberster", 2024],
+    ["BYD", "Seal", 2024],
+    ["Volvo", "EX30", 2024],
+    ["Kia", "EV3", 2024],
+    ["Mercedes-Benz", "EQS SUV", 2024],
+    ["Lucid", "Air", 2023],
+    ["Rivian", "R1T", 2024],
+    ["GMC", "Hummer EV", 2024],
+    ["Rimac", "Nevera", 2023]
+  ];
+  cases.forEach(([make, model, year]) => {
+    const r = specs.lookup(make, model, year);
+    assert.ok(r, `${make} ${model} should resolve`);
+    assert.equal(r.co2, 0, `${make} ${model} CO2 should be 0`);
+    assert.equal(r.fuelType, "electric", `${make} ${model} fuel should be electric`);
+    assert.equal(r.nox, 0, `${make} ${model} NOx should be 0`);
+  });
+});
+
+test("exact EV keys win over base-model prefix", () => {
+  // "Mustang Mach-E" must not resolve to "Mustang GT"
+  assert.equal(specs.matchModel("Ford", "Mustang Mach-E"), "Mustang Mach-E");
+  // "Macan Electric" must not resolve to "Macan"
+  assert.equal(specs.matchModel("Porsche", "Macan Electric"), "Macan Electric");
+  // "RS e-tron GT" has its own key (does not prefix-match "e-tron GT")
+  assert.equal(specs.matchModel("Audi", "RS e-tron GT"), "RS e-tron GT");
+  // "IONIQ 5 N" must not resolve to "IONIQ 5"
+  assert.equal(specs.matchModel("Hyundai", "IONIQ 5 N"), "IONIQ 5 N");
+});

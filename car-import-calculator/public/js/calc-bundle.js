@@ -1031,6 +1031,18 @@
             fuel: "diesel",
             ranges: [{ from: 2014, to: 2019, diesel: 149, standard: "nedc" }],
           },
+          "Grandland Electric": {
+            fuel: "electric",
+            ranges: [{ from: 2024, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          "Astra Electric": {
+            fuel: "electric",
+            ranges: [{ from: 2023, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          "Frontera Electric": {
+            fuel: "electric",
+            ranges: [{ from: 2025, to: 2026, electric: 0, standard: "wltp" }],
+          },
         },
 
         Ford: {
@@ -1079,6 +1091,10 @@
               { from: 2016, to: 2018, petrol: 269, standard: "wltp" },
               { from: 2019, to: 2022, petrol: 263, standard: "wltp" },
             ],
+          },
+          "Mustang Mach-E": {
+            fuel: "electric",
+            ranges: [{ from: 2021, to: 2026, electric: 0, standard: "wltp" }],
           },
           "Focus RS": {
             fuel: "petrol",
@@ -1397,6 +1413,14 @@
             fuel: "electric",
             ranges: [{ from: 2023, to: 2026, electric: 0, standard: "wltp" }],
           },
+          i5: {
+            fuel: "electric",
+            ranges: [{ from: 2023, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          i7: {
+            fuel: "electric",
+            ranges: [{ from: 2022, to: 2026, electric: 0, standard: "wltp" }],
+          },
         },
 
         Audi: {
@@ -1557,6 +1581,14 @@
             fuel: "electric",
             ranges: [{ from: 2021, to: 2026, electric: 0, standard: "wltp" }],
           },
+          "Q8 e-tron": {
+            fuel: "electric",
+            ranges: [{ from: 2023, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          "RS e-tron GT": {
+            fuel: "electric",
+            ranges: [{ from: 2022, to: 2026, electric: 0, standard: "wltp" }],
+          },
         },
 
         "Mercedes-Benz": {
@@ -1691,6 +1723,14 @@
           EQS: {
             fuel: "electric",
             ranges: [{ from: 2021, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          "EQS SUV": {
+            fuel: "electric",
+            ranges: [{ from: 2023, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          EQT: {
+            fuel: "electric",
+            ranges: [{ from: 2022, to: 2026, electric: 0, standard: "wltp" }],
           },
         },
 
@@ -1899,6 +1939,10 @@
             fuel: "electric",
             ranges: [{ from: 2021, to: 2026, electric: 0, standard: "wltp" }],
           },
+          "IONIQ 5 N": {
+            fuel: "electric",
+            ranges: [{ from: 2023, to: 2026, electric: 0, standard: "wltp" }],
+          },
           "i30 N": {
             fuel: "petrol",
             ranges: [{ from: 2018, to: 2022, petrol: 170, standard: "wltp" }],
@@ -2002,6 +2046,10 @@
           EV9: {
             fuel: "electric",
             ranges: [{ from: 2023, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          EV3: {
+            fuel: "electric",
+            ranges: [{ from: 2024, to: 2026, electric: 0, standard: "wltp" }],
           },
         },
 
@@ -2259,6 +2307,18 @@
             fuel: "electric",
             ranges: [{ from: 2020, to: 2026, electric: 0, standard: "wltp" }],
           },
+          C40: {
+            fuel: "electric",
+            ranges: [{ from: 2022, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          EX30: {
+            fuel: "electric",
+            ranges: [{ from: 2024, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          EX90: {
+            fuel: "electric",
+            ranges: [{ from: 2024, to: 2026, electric: 0, standard: "wltp" }],
+          },
         },
 
         Mazda: {
@@ -2515,6 +2575,10 @@
             fuel: "electric",
             ranges: [{ from: 2022, to: 2026, electric: 0, standard: "wltp" }],
           },
+          Cyberster: {
+            fuel: "electric",
+            ranges: [{ from: 2024, to: 2026, electric: 0, standard: "wltp" }],
+          },
         },
 
         Polestar: {
@@ -2522,12 +2586,32 @@
             fuel: "electric",
             ranges: [{ from: 2020, to: 2026, electric: 0, standard: "wltp" }],
           },
+          3: {
+            fuel: "electric",
+            ranges: [{ from: 2023, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          4: {
+            fuel: "electric",
+            ranges: [{ from: 2024, to: 2026, electric: 0, standard: "wltp" }],
+          },
         },
 
         BYD: {
           "Atto 3": {
             fuel: "electric",
             ranges: [{ from: 2022, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          Seal: {
+            fuel: "electric",
+            ranges: [{ from: 2023, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          Dolphin: {
+            fuel: "electric",
+            ranges: [{ from: 2023, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          "Sealion 7": {
+            fuel: "electric",
+            ranges: [{ from: 2025, to: 2026, electric: 0, standard: "wltp" }],
           },
         },
 
@@ -2605,6 +2689,10 @@
               { from: 2014, to: 2018, petrol: 168, diesel: 146, standard: "nedc" },
               { from: 2019, to: 2023, petrol: 158, standard: "wltp" },
             ],
+          },
+          "Macan Electric": {
+            fuel: "electric",
+            ranges: [{ from: 2024, to: 2026, electric: 0, standard: "wltp" }],
           },
           Cayenne: {
             fuel: "petrol",
@@ -2799,6 +2887,14 @@
             fuel: "petrol",
             ranges: [{ from: 2022, to: 2026, petrol: 208, standard: "wltp" }],
           },
+          Eletre: {
+            fuel: "electric",
+            ranges: [{ from: 2023, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          Emeya: {
+            fuel: "electric",
+            ranges: [{ from: 2024, to: 2026, electric: 0, standard: "wltp" }],
+          },
         },
 
         Lamborghini: {
@@ -2991,6 +3087,18 @@
               { from: 2021, to: 2024, petrol: 244, diesel: 168, standard: "wltp" },
             ],
           },
+          "Electrified G80": {
+            fuel: "electric",
+            ranges: [{ from: 2022, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          "Electrified GV70": {
+            fuel: "electric",
+            ranges: [{ from: 2022, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          GV60: {
+            fuel: "electric",
+            ranges: [{ from: 2022, to: 2026, electric: 0, standard: "wltp" }],
+          },
         },
 
         Infiniti: {
@@ -3098,6 +3206,38 @@
           75: {
             fuel: "petrol",
             ranges: [{ from: 2000, to: 2005, petrol: 209, diesel: 174, standard: "nedc" }],
+          },
+        },
+
+        Lucid: {
+          Air: {
+            fuel: "electric",
+            ranges: [{ from: 2022, to: 2026, electric: 0, standard: "wltp" }],
+          },
+        },
+
+        Rivian: {
+          R1T: {
+            fuel: "electric",
+            ranges: [{ from: 2023, to: 2026, electric: 0, standard: "wltp" }],
+          },
+          R1S: {
+            fuel: "electric",
+            ranges: [{ from: 2023, to: 2026, electric: 0, standard: "wltp" }],
+          },
+        },
+
+        GMC: {
+          "Hummer EV": {
+            fuel: "electric",
+            ranges: [{ from: 2023, to: 2026, electric: 0, standard: "wltp" }],
+          },
+        },
+
+        Rimac: {
+          Nevera: {
+            fuel: "electric",
+            ranges: [{ from: 2022, to: 2026, electric: 0, standard: "wltp" }],
           },
         },
       };
