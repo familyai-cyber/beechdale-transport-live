@@ -63,6 +63,16 @@ function refreshHints() {
   const buyer = document.querySelector('input[name="buyerType"]:checked').value;
   document.getElementById("origin-hint").textContent = ORIGIN_HINTS[origin];
   document.getElementById("buyer-hint").textContent = BUYER_HINTS[buyer];
+  updateKbNote();
+}
+
+/** Show the "auto-detected from knowledge base" confirmation only when CO₂ was
+ *  actually filled by the KB for the current car (critique-12). */
+function updateKbNote() {
+  const el = document.getElementById("co2-kb-note");
+  if (!el) return;
+  const co2El = document.getElementById("co2");
+  el.classList.toggle("hidden", !(autoApplied.has("co2") && co2El && co2El.value !== ""));
 }
 form.addEventListener("change", refreshHints);
 
@@ -232,7 +242,7 @@ const userTouched = new Set();
 /* Fields previously auto-filled from the knowledge base. Cleared when the
    car's make/model/year changes so stale figures never linger (critique-1). */
 const autoApplied = new Set();
-["co2", "nox", "fuel-type"].forEach((id) => {
+["co2", "nox", "fuel-type", "co2-standard"].forEach((id) => {
   const el = document.getElementById(id);
   if (el) {
     const mark = () => {
@@ -246,18 +256,38 @@ const autoApplied = new Set();
   }
 });
 
+/* Set when a partial extraction still needs user input (e.g. the asking
+   price). The first form change that completes the data auto-calculates. */
+let pendingPartialCalc = false;
+
 /** Drop values the knowledge base auto-filled so a changed car never keeps
  *  the previous car's CO₂/fuel/NOx. Never touches fields the user typed. */
 function clearAutoApplied() {
   if (autoApplied.size === 0) return;
   const reset = { co2: "", "fuel-type": "", nox: "", "co2-standard": "wltp" };
   autoApplied.forEach((id) => {
-    if (reset[id] !== undefined) {
+    if (reset[id] !== undefined && !userTouched.has(id)) {
       const el = document.getElementById(id);
       if (el) el.value = reset[id];
     }
   });
   autoApplied.clear();
+  updateKbNote();
+}
+
+/** Reset every spec field (CO₂, fuel, NOx, standard) and forget both which
+ *  ones the KB applied and which the user touched. Used when the car changes
+ *  (a different make) or a fresh listing is extracted, so the previous car's
+ *  figures never leak into the next one. */
+function resetSpecFields() {
+  const reset = { co2: "", "fuel-type": "", nox: "", "co2-standard": "wltp" };
+  Object.keys(reset).forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = reset[id];
+    userTouched.delete(id);
+  });
+  autoApplied.clear();
+  updateKbNote();
 }
 
 /**
@@ -267,11 +297,18 @@ function clearAutoApplied() {
  */
 function applyKnownSpecs() {
   if (!window.CarSpecs) return false;
-  const make = readFieldValue("make");
-  const model = readFieldValue("model");
+  let make = readFieldValue("make");
+  let model = readFieldValue("model");
   const year = Number(document.getElementById("year").value) || 0;
   if (!make || !model || !year) return false;
-  const spec = window.CarSpecs.lookup(make, model, year);
+  let spec = window.CarSpecs.lookup(make, model, year);
+  // Free-text "Other" entries can still match a known car — canonicalise them
+  // so the KB fills CO₂/fuel/NOx even for typed makes/models (critique-11).
+  if (!spec && canonicalizeMakeModel()) {
+    make = readFieldValue("make");
+    model = readFieldValue("model");
+    spec = window.CarSpecs.lookup(make, model, year);
+  }
   if (!spec) return false;
 
   let applied = false;
@@ -286,13 +323,15 @@ function applyKnownSpecs() {
   const fuelEl = document.getElementById("fuel-type");
   if (!userTouched.has("fuel-type") && spec.fuelType && fuelEl && fuelEl.value === "") {
     fuelEl.value = spec.fuelType;
+    flashField(fuelEl);
     autoApplied.add("fuel-type");
     applied = true;
   }
 
   const stdEl = document.getElementById("co2-standard");
-  if (spec.co2Standard && stdEl && stdEl.value !== spec.co2Standard) {
+  if (!userTouched.has("co2-standard") && spec.co2Standard && stdEl && stdEl.value !== spec.co2Standard) {
     stdEl.value = spec.co2Standard;
+    flashField(stdEl);
     autoApplied.add("co2-standard");
     applied = true;
   }
@@ -331,19 +370,47 @@ function markSpecMatchingFields() {
   if (match("fuel-type", spec.fuelType)) autoApplied.add("fuel-type");
   if (match("nox", spec.nox)) autoApplied.add("nox");
   if (match("co2-standard", spec.co2Standard)) autoApplied.add("co2-standard");
+  updateKbNote();
+}
+
+/** Resolve a free-text "Other" make/model to a canonical knowledge-base entry
+ *  (e.g. "Porsche" + "Taycan Turbo" → Porsche · Taycan). Returns true when the
+ *  selects were re-pointed to real options so KB lookups succeed. */
+function canonicalizeMakeModel() {
+  if (!window.CarSpecs) return false;
+  const rawMake = readFieldValue("make");
+  const rawModel = readFieldValue("model");
+  if (!rawMake || !rawModel) return false;
+  const mk = window.CarSpecs.matchMake(rawMake);
+  if (!mk) return false;
+  const md = window.CarSpecs.matchModel(mk, rawModel);
+  if (!md) return false;
+  if (mk === rawMake && md === rawModel) return false;
+  setFieldValue("make", mk);
+  populateModels();
+  setFieldValue("model", md);
+  // Real options now exist — hide the "Other" free-text inputs.
+  const mo = document.getElementById("make-other");
+  if (mo) mo.classList.add("hidden");
+  const so = document.getElementById("model-other");
+  if (so) so.classList.add("hidden");
+  return true;
 }
 
 function onMakeChange() {
+  pendingPartialCalc = false; // user is switching cars — a partial extract's auto-calc no longer applies
   const other = document.getElementById("make-other");
   if (other) other.classList.toggle("hidden", document.getElementById("make").value !== "__other__");
   populateModels();
   document.getElementById("model").value = "";
   const so = document.getElementById("model-other");
   if (so) { so.value = ""; so.classList.add("hidden"); }
-  clearAutoApplied();
+  // A different make means a different car — drop the previous car's figures.
+  resetSpecFields();
   applyKnownSpecs();
 }
 function onModelChange() {
+  pendingPartialCalc = false;
   const other = document.getElementById("model-other");
   if (other) other.classList.toggle("hidden", document.getElementById("model").value !== "__other__");
   clearAutoApplied();
@@ -372,9 +439,9 @@ function buildPayload() {
 
 function validate() {
   const y = Number(document.getElementById("year").value);
-  if (!y || y < 1990 || y > CURRENT_YEAR + 1) return `Please select a valid year of first registration (1990–${CURRENT_YEAR + 1}).`;
+  if (!y || y < 1990 || y > CURRENT_YEAR + 1) return { msg: `Please select a valid year of first registration (1990–${CURRENT_YEAR + 1}).`, focusId: "year" };
   const p = Number(document.getElementById("uk-price").value);
-  if (!p || p <= 0) return "Please enter a valid UK purchase price in £.";
+  if (!p || p <= 0) return { msg: "Please enter a valid UK purchase price in £.", focusId: "uk-price" };
   const c = document.getElementById("co2").value;
   let fuel = document.getElementById("fuel-type").value;
   // Try the knowledge base first: make/model/year may already auto-fill CO₂
@@ -387,15 +454,24 @@ function validate() {
     if (c2 === "") document.getElementById("co2").value = "0";
     return null;
   }
-  if (c2 === "" || Number(c2) < 0 || Number.isNaN(Number(c2))) return "Please enter the CO₂ figure (g/km) from the V5C.";
+  if (c2 === "" || Number(c2) < 0 || Number.isNaN(Number(c2))) return { msg: "Please enter the CO₂ figure (g/km) from the V5C.", focusId: "co2" };
   return null;
 }
 
 async function submit(e) {
   e.preventDefault();
   clearError();
+  pendingPartialCalc = false;
   const err = validate();
-  if (err) { showError(err); return; }
+  if (err) {
+    showError(err.msg);
+    const focusEl = err.focusId ? document.getElementById(err.focusId) : null;
+    if (focusEl) {
+      focusEl.focus();
+      focusEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    return;
+  }
 
   submitBtn.disabled = true;
   submitBtn.classList.add("loading");
@@ -684,10 +760,17 @@ function fillFromListing(r) {
   const notes = [];
 
   if (r.make) {
-    setFieldValue("make", r.make);
+    const canonMake = window.CarSpecs && window.CarSpecs.matchMake ? window.CarSpecs.matchMake(r.make) : null;
+    const make = canonMake || r.make;
+    setFieldValue("make", make);
     populateModels();
+    if (r.model) {
+      const canonModel = window.CarSpecs && window.CarSpecs.matchModel ? window.CarSpecs.matchModel(make, r.model) : null;
+      setFieldValue("model", canonModel || r.model);
+    }
+  } else if (r.model) {
+    setFieldValue("model", r.model);
   }
-  if (r.model) setFieldValue("model", r.model);
   if (r.year) setVal("year", String(r.year));
   const mo = document.getElementById("make-other");
   if (mo) mo.classList.toggle("hidden", document.getElementById("make").value !== "__other__");
@@ -747,13 +830,28 @@ function autoCalculateIfReady() {
   // CO₂ is "present" when non-zero, OR when the car is an EV (0 g/km is valid).
   const fuel = document.getElementById("fuel-type").value;
   const co2 = document.getElementById("co2").value;
-  const co2Ok = fuel === "electric" ? co2 !== "" : co2 !== "" && Number(co2) > 0;
+  const co2Ok = fuel === "electric" ? true : co2 !== "" && Number(co2) > 0;
   if (has("year") && has("uk-price") && co2Ok) {
     form.requestSubmit();
     return true;
   }
   return false;
 }
+
+/* After a partial extract, calculate as soon as the missing detail is
+   filled in — one less click, and the result stays up to date. */
+form.addEventListener("change", () => {
+  if (!pendingPartialCalc) return;
+  pendingPartialCalc = false;
+  if (autoCalculateIfReady()) {
+    if (extractedChip.className.includes("partial")) {
+      setChip("ok", "Details complete — calculating…");
+      extractHintMsg("");
+    }
+  } else {
+    pendingPartialCalc = true;
+  }
+});
 
 async function extractFromUrl() {
   const url = listingUrl.value.trim();
@@ -843,6 +941,8 @@ async function extractFromUrl() {
     // URL-only results are partial: fill what we have, then ask for the price.
     const result = extracted || urlOnly;
     const isUrlOnly = !!urlOnly;
+    pendingPartialCalc = false;
+    resetSpecFields();
     const notes = fillFromListing(result) || [];
 
     if (isUrlOnly) {
@@ -859,6 +959,7 @@ async function extractFromUrl() {
       if (ask.length) {
         setChip("partial", `Read from link: ${parts}. Please add ${ask.join(" and ")} and press Calculate.`);
         extractHintMsg(hint);
+        pendingPartialCalc = true;
         const focusId = ask.includes("CO₂") ? "co2" : "uk-price";
         const el = document.getElementById(focusId);
         if (el) {
@@ -888,6 +989,7 @@ async function extractFromUrl() {
 
     if (missing.length) {
       setChip("partial", `Extracted: ${parts}. Please add: ${missing.join(", ")}.`);
+      pendingPartialCalc = true;
       if (missing.includes("CO₂")) {
         extractHintMsg("CO₂ is needed for VRT — it's on the UK V5C or the advert's spec. NOx is optional: Revenue applies a default rate if left blank. Add CO₂ and press Calculate.");
       } else {
@@ -943,6 +1045,7 @@ function syncClearBtn() {
   if (clearUrlBtn) clearUrlBtn.classList.toggle("hidden", listingUrl.value === "");
 }
 listingUrl.addEventListener("input", () => {
+  pendingPartialCalc = false;
   syncClearBtn();
   const cls = extractedChip.className;
   if (cls.includes("ok") || cls.includes("partial")) {
@@ -953,6 +1056,7 @@ listingUrl.addEventListener("input", () => {
 if (clearUrlBtn) {
   clearUrlBtn.addEventListener("click", () => {
     listingUrl.value = "";
+    pendingPartialCalc = false;
     syncClearBtn();
     setChip("", "");
     extractHintMsg("");
@@ -983,16 +1087,17 @@ makeEl.addEventListener("change", onMakeChange);
 modelEl.addEventListener("change", onModelChange);
 // Changing the car (make/model/year) drops any KB-auto-filled figures first
 // so a different car never keeps the old car's CO₂/fuel/NOx (critique-1).
-yearEl.addEventListener("change", () => { clearAutoApplied(); applyKnownSpecs(); });
+yearEl.addEventListener("change", () => { pendingPartialCalc = false; clearAutoApplied(); applyKnownSpecs(); });
 if (makeOtherEl) {
   makeOtherEl.addEventListener("input", () => {
+    pendingPartialCalc = false;
     populateModels();
-    clearAutoApplied();
+    resetSpecFields();
     applyKnownSpecs();
   });
 }
 if (modelOtherEl) {
-  modelOtherEl.addEventListener("input", () => { clearAutoApplied(); applyKnownSpecs(); });
+  modelOtherEl.addEventListener("input", () => { pendingPartialCalc = false; clearAutoApplied(); applyKnownSpecs(); });
 }
 
 // Click-to-select the pasted URL so pasting replaces it in one step (pass-21).

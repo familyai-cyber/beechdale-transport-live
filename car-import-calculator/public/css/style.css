@@ -103,6 +103,7 @@ body {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .hint-text { color: var(--muted); font-size: 0.8rem; }
+.kb-note { color: #2e7d32; font-weight: 600; }
 
 /* Currency adornments (pass-14) */
 .input-adorn { position: relative; display: flex; align-items: center; }

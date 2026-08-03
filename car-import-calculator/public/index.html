@@ -55,7 +55,7 @@
             <select id="make">
               <option value="" selected>Select make…</option>
             </select>
-            <input type="text" id="make-other" class="other-input hidden" placeholder="Type the make" autocomplete="off" />
+            <input type="text" id="make-other" class="other-input hidden" placeholder="Type the make" autocomplete="off" aria-label="Make (other)" />
             <small class="hint-text" id="make-hint">Select the make — CO₂ &amp; NOx auto-fill for known models.</small>
           </label>
           <label class="field" for="model">
@@ -63,7 +63,7 @@
             <select id="model" disabled>
               <option value="" selected>Select make first…</option>
             </select>
-            <input type="text" id="model-other" class="other-input hidden" placeholder="Type the model" autocomplete="off" />
+            <input type="text" id="model-other" class="other-input hidden" placeholder="Type the model" autocomplete="off" aria-label="Model (other)" />
           </label>
         </div>
 
@@ -88,6 +88,7 @@
             <span>CO₂ emissions (g/km)</span>
             <input type="number" id="co2" placeholder="e.g. 118" min="0" step="1" />
             <small class="hint-text" id="co2-hint">Auto-filled for known models — verify with the V5C (logbook). Required for petrol/diesel.</small>
+            <small class="hint-text kb-note hidden" id="co2-kb-note">✓ Auto-detected from the car knowledge base — verify with the V5C (logbook) before you buy.</small>
           </label>
           <label class="field" for="nox">
             <span>NOx emissions (mg/km) <em class="opt">optional</em></span>
