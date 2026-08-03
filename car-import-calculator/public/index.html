@@ -84,11 +84,24 @@
         </div>
 
         <div class="grid">
+          <label class="field" for="reg-plate">
+            <span>UK/NI registration plate <em class="opt">optional</em></span>
+            <input type="text" id="reg-plate" placeholder="e.g. YN20 ABC" autocomplete="off" />
+            <small class="hint-text" id="reg-plate-hint">Optional — we can read the year from the plate and link to the DVLA check.</small>
+          </label>
+          <label class="field" for="dvla-link">
+            <span class="dvla-link-label">&nbsp;</span>
+            <a id="dvla-link" class="btn-ghost hidden" href="#" target="_blank" rel="noopener">Check this plate on DVLA ↗</a>
+            <small class="hint-text" id="dvla-hint"></small>
+          </label>
+        </div>
+
+        <div class="grid">
           <label class="field" for="co2">
             <span>CO₂ emissions (g/km)</span>
             <input type="number" id="co2" placeholder="e.g. 118" min="0" step="1" />
             <small class="hint-text" id="co2-hint">Auto-filled for known models — verify with the V5C (logbook). Required for petrol/diesel.</small>
-            <small class="hint-text kb-note hidden" id="co2-kb-note">✓ Auto-detected from the car knowledge base — verify with the V5C (logbook) before you buy.</small>
+            <small class="hint-text kb-note hidden" id="co2-kb-note">✓ Auto-detected from the car knowledge base — <span id="co2-kb-source"></span> Verify with the V5C (logbook) before you buy.</small>
           </label>
           <label class="field" for="nox">
             <span>NOx emissions (mg/km) <em class="opt">optional</em></span>
@@ -152,6 +165,19 @@
         </fieldset>
         <p class="hint" id="buyer-hint" aria-live="polite"></p>
 
+        <div class="ni-checklist hidden" id="ni-checklist" aria-labelledby="ni-checklist-title">
+          <h3 id="ni-checklist-title">✅ Northern Ireland used-car checklist</h3>
+          <p class="hint-text">To claim the NI exemption (no customs duty, no import VAT) Revenue looks for proof the car was <em>already in use in NI</em> before you import it. Keep these together:</p>
+          <ul>
+            <li>V5C logbook registered to an NI address</li>
+            <li>Current NI MOT certificate</li>
+            <li>NI road tax &amp; insurance in the keeper's name</li>
+            <li>Proof of the seller's / previous keeper's NI residence</li>
+            <li>Receipts, service history or anything showing use in NI</li>
+          </ul>
+          <p class="hint-text">If the car was never actually used in NI (e.g. driven straight across), Revenue can still treat it as a GB import and charge duty + VAT.</p>
+        </div>
+
         <label class="field" for="shipping">
           <span>Shipping / transport to Ireland</span>
           <div class="input-adorn">
@@ -170,7 +196,13 @@
     <section id="results" class="card results-card hidden" aria-live="polite">
       <div class="results-head">
         <h2>Estimated import cost</h2>
-        <button type="button" id="copy-btn" class="btn-ghost hidden" title="Copy a text summary">📋 Copy summary</button>
+        <div class="results-actions" id="results-actions">
+          <button type="button" id="copy-btn" class="btn-ghost hidden" title="Copy a text summary">📋 Copy</button>
+          <button type="button" id="share-btn" class="btn-ghost hidden" title="Share a link that pre-fills this quote">🔗 Share</button>
+          <button type="button" id="save-btn" class="btn-ghost hidden" title="Save this quote to compare later">💾 Save</button>
+          <button type="button" id="print-btn" class="btn-ghost hidden" title="Print or save this as a PDF">🖨️ PDF</button>
+          <button type="button" id="email-btn" class="btn-ghost hidden" title="Email this summary">✉️ Email</button>
+        </div>
       </div>
       <div id="result-summary" class="summary-lines"></div>
 
@@ -180,7 +212,30 @@
       <div class="breakdown" id="breakdown"></div>
 
       <div class="notes" id="result-notes"></div>
+
+      <div class="saved-quotes hidden" id="saved-quotes">
+        <h3>💾 Saved quotes</h3>
+        <div class="table-wrap">
+          <table class="quotes-table">
+            <thead>
+              <tr>
+                <th>Car</th>
+                <th>Origin</th>
+                <th>Buyer</th>
+                <th class="num">Total</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="saved-quotes-body"></tbody>
+          </table>
+        </div>
+        <p class="hint-text">Saved on this device only. Tap a row to reload that quote.</p>
+      </div>
     </section>
+
+    <div class="share-note hidden" id="share-note" role="status">
+      <span id="share-note-text">Link copied!</span>
+    </div>
 
     <section class="card glossary" aria-labelledby="glossary-title">
       <h2 id="glossary-title">How it works</h2>

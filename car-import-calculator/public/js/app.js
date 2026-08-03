@@ -6,14 +6,21 @@ const submitBtn = document.getElementById("submit-btn");
 const formError = document.getElementById("form-error");
 const fxBadge = document.getElementById("fx-badge");
 const copyBtn = document.getElementById("copy-btn");
+const shareBtn = document.getElementById("share-btn");
+const saveBtn = document.getElementById("save-btn");
+const printBtn = document.getElementById("print-btn");
+const emailBtn = document.getElementById("email-btn");
 
 const STORAGE_KEY = "carImportCalculator.v2";
+const SAVED_QUOTES_KEY = "carImportCalculator.quotes.v1";
 
 const fmt = (n) => "€" + Number(n).toLocaleString("en-IE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt0 = (n) => "€" + Number(n).toLocaleString("en-IE", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const gbp = (n) => "£" + Number(n).toLocaleString("en-IE", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
 let fxRate = null; // current live rate
+let lastSpecSource = ""; // source attribution for the last KB lookup (feature: kb-source)
+let lastResult = null; // last {payload, total, label} for share/save (features: share, save)
 
 /* ── FX badge (pass-03) ──────────────────────────────────────────── */
 async function loadFx() {
@@ -64,15 +71,22 @@ function refreshHints() {
   document.getElementById("origin-hint").textContent = ORIGIN_HINTS[origin];
   document.getElementById("buyer-hint").textContent = BUYER_HINTS[buyer];
   updateKbNote();
+  syncNiChecklist();
 }
 
 /** Show the "auto-detected from knowledge base" confirmation only when CO₂ was
- *  actually filled by the KB for the current car (critique-12). */
+ *  actually filled by the KB for the current car (critique-12), and attribute
+ *  where the figure came from (feature: kb-source). */
 function updateKbNote() {
   const el = document.getElementById("co2-kb-note");
   if (!el) return;
   const co2El = document.getElementById("co2");
-  el.classList.toggle("hidden", !(autoApplied.has("co2") && co2El && co2El.value !== ""));
+  const visible = autoApplied.has("co2") && co2El && co2El.value !== "";
+  el.classList.toggle("hidden", !visible);
+  if (visible && lastSpecSource) {
+    const srcEl = document.getElementById("co2-kb-source");
+    if (srcEl) srcEl.textContent = lastSpecSource;
+  }
 }
 form.addEventListener("change", refreshHints);
 
@@ -272,6 +286,7 @@ function clearAutoApplied() {
     }
   });
   autoApplied.clear();
+  lastSpecSource = "";
   updateKbNote();
 }
 
@@ -287,6 +302,7 @@ function resetSpecFields() {
     userTouched.delete(id);
   });
   autoApplied.clear();
+  lastSpecSource = "";
   updateKbNote();
 }
 
@@ -309,6 +325,7 @@ function applyKnownSpecs() {
     model = readFieldValue("model");
     spec = window.CarSpecs.lookup(make, model, year);
   }
+  lastSpecSource = spec ? (spec.source || "") : "";
   if (!spec) return false;
 
   let applied = false;
@@ -360,6 +377,7 @@ function markSpecMatchingFields() {
   const year = Number(document.getElementById("year").value) || 0;
   if (!make || !model || !year) return;
   const spec = window.CarSpecs.lookup(make, model, year);
+  lastSpecSource = spec ? (spec.source || "") : "";
   if (!spec) return;
   const match = (id, v) => {
     if (v == null) return false;
@@ -551,6 +569,7 @@ const row = (label, sub, valueEl, cls) => {
 function render(data) {
   const b = data.breakdown;
   const carLabel = [data.car.make, data.car.model].filter(Boolean).join(" ") || "This car";
+  lastResult = { total: data.total, car: data.car };
   const originLabel = data.car.origin === "NI" ? "Northern Ireland" : "Great Britain";
   const buyerLabel = data.car.buyerType === "vat-dealer" ? "VAT-registered dealer" : "private buyer";
   const fxEurPerGbp = b.fxRate;
@@ -686,8 +705,12 @@ function render(data) {
   noteP(`Annual motor tax is ${fmt(b.annualMotorTax)}/yr and is not part of the import total above.`);
   noteP("Estimate only — final duty, VAT and VRT are set by Revenue at registration.");
 
-  /* Copy button (pass-17) */
+  /* Action buttons (pass-17 + features: share/save/pdf/email) */
   copyBtn.classList.remove("hidden");
+  shareBtn.classList.remove("hidden");
+  saveBtn.classList.remove("hidden");
+  printBtn.classList.remove("hidden");
+  emailBtn.classList.remove("hidden");
 
   results.classList.remove("hidden");
   results.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -719,6 +742,16 @@ const extractHint = document.getElementById("extract-hint");
 const extractedChip = document.getElementById("extracted-chip");
 
 const PROXIES = [
+  // 1st choice: our own serverless proxy (Cloudflare Worker / Deno Deploy) when
+  // deployed. It fetches the listing server-side (better IP pool + real UA) and
+  // returns HTML with permissive CORS. Kept as a placeholder URL so the app
+  // works out of the box; replace with your deployed worker URL to enable.
+  //   Deploy:  wrangler deploy functions/parse-listing-proxy.js --name car-import-parser
+  //   then:    https://car-import-parser.<your-subdomain>.workers.dev
+  (u) => ({
+    url: `https://car-import-parser.YOUR-WORKER-SUBDOMAIN.workers.dev/?url=${encodeURIComponent(u)}`,
+    timeout: 20000,
+  }),
   // Jina Reader renders the page server-side and returns it with permissive CORS.
   // It's the only public proxy that reliably reads Autotrader (works on Pages).
   (u) => ({
@@ -892,7 +925,7 @@ async function extractFromUrl() {
       for (const proxy of PROXIES) {
         try {
           const p = proxy(url);
-          const html = await fetchWithTimeout(p.url, 15000, p.headers);
+          const html = await fetchWithTimeout(p.url, p.timeout || 15000, p.headers);
           const r = window.CarListingParser && window.CarListingParser.extractListing(url, html, { fxRate });
           if (r && r.confidence > 0 && (r.priceGBP || r.priceEUR)) { extracted = r; break; }
         } catch { /* try next proxy */ }
@@ -1083,6 +1116,16 @@ if (!readFieldValue("make")) populateModels(); // leaves model select disabled
 
 restore();
 
+// Feature: share deep-links — a #q= hash restores an exact quote.
+(function applySharedHash() {
+  const m = /#q=([^&]+)/.exec(location.hash);
+  if (!m) return;
+  try {
+    const s = JSON.parse(decodeURIComponent(m[1]));
+    if (s && typeof s === "object") applySharedState(s);
+  } catch { /* ignore malformed hashes */ }
+})();
+
 makeEl.addEventListener("change", onMakeChange);
 modelEl.addEventListener("change", onModelChange);
 // Changing the car (make/model/year) drops any KB-auto-filled figures first
@@ -1105,3 +1148,203 @@ const listingUrlEl = document.getElementById("listing-url");
 if (listingUrlEl) {
   listingUrlEl.addEventListener("focus", () => listingUrlEl.select());
 }
+
+/* ══ Feature batch: NI checklist · deep links · saved quotes · PDF/email · reg-plate ══ */
+
+/** Toggle the NI used-car checklist when the origin switches to NI. */
+function syncNiChecklist() {
+  const el = document.getElementById("ni-checklist");
+  if (!el) return;
+  const origin = document.querySelector('input[name="origin"]:checked');
+  el.classList.toggle("hidden", !origin || origin.value !== "NI");
+}
+
+/** Snapshot the current form into a compact shareable state object. */
+function buildShareState() {
+  return {
+    origin: document.querySelector('input[name="origin"]:checked').value,
+    buyerType: document.querySelector('input[name="buyerType"]:checked').value,
+    year: document.getElementById("year").value,
+    make: readFieldValue("make"),
+    model: readFieldValue("model"),
+    price: document.getElementById("uk-price").value,
+    co2: document.getElementById("co2").value,
+    nox: document.getElementById("nox").value,
+    shipping: document.getElementById("shipping").value,
+    fuelType: document.getElementById("fuel-type").value,
+    co2Standard: document.getElementById("co2-standard").value,
+  };
+}
+
+/** Restore a shared/saved state onto the form and re-calculate. */
+function applySharedState(s) {
+  if (!s || typeof s !== "object") return;
+  if (s.make) {
+    setFieldValue("make", s.make);
+    populateModels();
+  }
+  if (s.model) setFieldValue("model", s.model);
+  const keyMap = { year: "year", price: "uk-price", co2: "co2", nox: "nox", shipping: "shipping", fuelType: "fuel-type", co2Standard: "co2-standard" };
+  Object.keys(keyMap).forEach((k) => {
+    if (s[k] != null && s[k] !== "") {
+      const el = document.getElementById(keyMap[k]);
+      if (el) el.value = s[k];
+    }
+  });
+  const mo = document.getElementById("make-other");
+  if (mo) mo.classList.toggle("hidden", document.getElementById("make").value !== "__other__");
+  const so = document.getElementById("model-other");
+  if (so) so.classList.toggle("hidden", document.getElementById("model").value !== "__other__");
+  if (s.origin) {
+    const o = document.querySelector(`input[name="origin"][value="${s.origin}"]`);
+    if (o) o.checked = true;
+  }
+  if (s.buyerType) {
+    const b = document.querySelector(`input[name="buyerType"][value="${s.buyerType}"]`);
+    if (b) b.checked = true;
+  }
+  refreshHints();
+  applyKnownSpecs();
+  persist();
+  form.requestSubmit();
+}
+
+/* ── Share deep-links (feature 3) ───────────────────────────────── */
+let shareNoteTimer = null;
+function showShareNote(text, ms) {
+  const note = document.getElementById("share-note");
+  const span = document.getElementById("share-note-text");
+  if (!note || !span) return;
+  span.textContent = text;
+  note.classList.remove("hidden");
+  clearTimeout(shareNoteTimer);
+  shareNoteTimer = setTimeout(() => note.classList.add("hidden"), ms || 3000);
+}
+
+shareBtn.addEventListener("click", async () => {
+  if (!lastResult) return;
+  const state = buildShareState();
+  const hash = "#q=" + encodeURIComponent(JSON.stringify(state));
+  const url = location.origin + location.pathname + location.search + hash;
+  try {
+    await navigator.clipboard.writeText(url);
+    history.replaceState(null, "", hash);
+    showShareNote("🔗 Link copied — it will re-open this exact quote.", 3000);
+  } catch {
+    showShareNote("Couldn't copy — your browser blocked the clipboard.", 4000);
+  }
+});
+
+/* ── Saved quotes / compare (feature 4) ─────────────────────────── */
+function loadSavedQuotes() {
+  try { return JSON.parse(localStorage.getItem(SAVED_QUOTES_KEY)) || []; } catch { return []; }
+}
+
+function renderSavedQuotes() {
+  const box = document.getElementById("saved-quotes");
+  const tbody = document.getElementById("saved-quotes-body");
+  if (!box || !tbody) return;
+  const quotes = loadSavedQuotes();
+  box.classList.toggle("hidden", quotes.length === 0);
+  tbody.innerHTML = "";
+  quotes.forEach((q, i) => {
+    const tr = document.createElement("tr");
+    tr.title = "Click to reload this quote";
+    const tdCar = document.createElement("td");
+    tdCar.textContent = q.label;
+    const tdOrg = document.createElement("td");
+    tdOrg.textContent = q.state.origin === "NI" ? "🇮🇪 NI" : "🇬🇧 GB";
+    const tdB = document.createElement("td");
+    tdB.textContent = q.state.buyerType === "vat-dealer" ? "Dealer" : "Private";
+    const tdT = document.createElement("td");
+    tdT.className = "num";
+    tdT.textContent = fmt(q.total);
+    const tdX = document.createElement("td");
+    const del = document.createElement("button");
+    del.className = "row-del";
+    del.type = "button";
+    del.textContent = "✕";
+    del.title = "Delete this saved quote";
+    del.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const all = loadSavedQuotes();
+      all.splice(i, 1);
+      try { localStorage.setItem(SAVED_QUOTES_KEY, JSON.stringify(all)); } catch {}
+      renderSavedQuotes();
+    });
+    tdX.appendChild(del);
+    tr.appendChild(tdCar);
+    tr.appendChild(tdOrg);
+    tr.appendChild(tdB);
+    tr.appendChild(tdT);
+    tr.appendChild(tdX);
+    tr.addEventListener("click", () => {
+      applySharedState(q.state);
+      results.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+saveBtn.addEventListener("click", () => {
+  if (!lastResult) return;
+  const state = buildShareState();
+  const label = [state.make, state.model, state.year].filter(Boolean).join(" ") || "Quote";
+  const quotes = loadSavedQuotes();
+  quotes.unshift({ ts: Date.now(), label, total: lastResult.total, state });
+  const trimmed = quotes.slice(0, 30);
+  try { localStorage.setItem(SAVED_QUOTES_KEY, JSON.stringify(trimmed)); } catch {}
+  renderSavedQuotes();
+  showShareNote("💾 Quote saved — see the table below.", 3000);
+});
+renderSavedQuotes();
+
+/* ── PDF / email (feature 5) ────────────────────────────────────── */
+printBtn.addEventListener("click", () => window.print());
+
+emailBtn.addEventListener("click", () => {
+  const summary = document.getElementById("result-summary").textContent;
+  const total = document.getElementById("big-total").textContent.replace(/\s+/g, " ").trim();
+  const car = [readFieldValue("make"), readFieldValue("model")].filter(Boolean).join(" ") || "Car";
+  const subject = encodeURIComponent(`Car import cost estimate — ${car}`);
+  const body = encodeURIComponent(summary + "\n\nTotal: " + total + "\n\nEstimated at the Car Import Cost Calculator.");
+  window.location.href = `mailto:?subject=${subject}&body=${body}`;
+});
+
+/* ── UK/NI reg-plate lookup (feature 6) ─────────────────────────── */
+const regPlateEl = document.getElementById("reg-plate");
+const dvlaLinkEl = document.getElementById("dvla-link");
+const regPlateHintEl = document.getElementById("reg-plate-hint");
+// gov.uk MOT history accepts a query param (DVLA's vehicle enquiry is POST-only).
+const DVLA_CHECK_URL = "https://www.gov.uk/check-mot-history?registrationNumber=";
+
+/** Current-format GB plates carry the year in the middle, e.g. YN20 ABC → 2020. */
+function yearFromGbPlate(text) {
+  const m = /\b[A-Z]{2}\s?(\d{2})\s?[A-Z]{3}\b/.exec(String(text || ""));
+  if (!m) return null;
+  const yy = Number(m[1]);
+  return yy >= 50 ? 2000 + (yy - 50) : 2000 + yy;
+}
+
+if (regPlateEl) {
+  regPlateEl.addEventListener("input", () => {
+    const plate = regPlateEl.value.trim().toUpperCase();
+    const year = yearFromGbPlate(plate);
+    const yearField = document.getElementById("year");
+    if (year && yearField && !yearField.value) {
+      yearField.value = String(year);
+      flashField(yearField);
+    }
+    if (dvlaLinkEl) {
+      dvlaLinkEl.href = plate ? DVLA_CHECK_URL + encodeURIComponent(plate) : "#";
+      dvlaLinkEl.classList.toggle("hidden", !plate);
+    }
+    if (regPlateHintEl) {
+      regPlateHintEl.textContent = year
+        ? `Plate reads as ${year} — the year field was filled in for you.`
+        : "Optional — we can read the year from the plate and link to the DVLA check.";
+    }
+  });
+}
+
+syncNiChecklist();
