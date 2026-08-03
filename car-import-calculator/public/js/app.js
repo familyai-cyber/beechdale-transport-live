@@ -1226,12 +1226,13 @@ shareBtn.addEventListener("click", async () => {
   const state = buildShareState();
   const hash = "#q=" + encodeURIComponent(JSON.stringify(state));
   const url = location.origin + location.pathname + location.search + hash;
+  // Always put the deep-link in the URL bar first — then copy as a bonus.
+  try { history.replaceState(null, "", hash); } catch {}
   try {
     await navigator.clipboard.writeText(url);
-    history.replaceState(null, "", hash);
     showShareNote("🔗 Link copied — it will re-open this exact quote.", 3000);
   } catch {
-    showShareNote("Couldn't copy — your browser blocked the clipboard.", 4000);
+    showShareNote("🔗 Deep-link in the address bar — copy it from there.", 4000);
   }
 });
 
@@ -1331,7 +1332,8 @@ if (regPlateEl) {
     const plate = regPlateEl.value.trim().toUpperCase();
     const year = yearFromGbPlate(plate);
     const yearField = document.getElementById("year");
-    if (year && yearField && !yearField.value) {
+    // A plate the user typed is authoritative for the year — always update.
+    if (year && yearField && yearField.value !== String(year)) {
       yearField.value = String(year);
       flashField(yearField);
     }
@@ -1341,7 +1343,7 @@ if (regPlateEl) {
     }
     if (regPlateHintEl) {
       regPlateHintEl.textContent = year
-        ? `Plate reads as ${year} — the year field was filled in for you.`
+        ? `Plate reads as ${year} — the year field was set for you.`
         : "Optional — we can read the year from the plate and link to the DVLA check.";
     }
   });
